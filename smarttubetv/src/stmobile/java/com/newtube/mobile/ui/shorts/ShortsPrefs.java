@@ -3,8 +3,6 @@ package com.newtube.mobile.ui.shorts;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-import androidx.preference.PreferenceManager;
-
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem.VideoPreset;
 import com.liskovsoft.smartyoutubetv2.common.misc.AppDataSourceManager;
@@ -49,6 +47,6 @@ public final class ShortsPrefs {
     }
 
     private static SharedPreferences prefs(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context);
+        return context.getApplicationContext().getSharedPreferences("mobile_shorts", Context.MODE_PRIVATE);
     }
 }

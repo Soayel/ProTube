@@ -52,9 +52,9 @@ import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.newtube.mobile.player.Media3PlayerInitializer;
 import com.newtube.mobile.player.Media3SourceFactory;
 
-import io.reactivex.android.schedulers.AndroidSchedulers;
-import io.reactivex.disposables.CompositeDisposable;
-import io.reactivex.schedulers.Schedulers;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 
 import java.util.ArrayList;
 import java.util.Collections;
