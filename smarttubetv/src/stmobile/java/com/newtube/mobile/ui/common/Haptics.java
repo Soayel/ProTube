@@ -93,12 +93,16 @@ public final class Haptics {
             return;
         }
         sLastThresholdAt = SystemClock.uptimeMillis();
-        Vibrator composer = composer(view);
-        if (composer != null) {
-            vibrate(composer, VibrationEffect.startComposition()
-                    .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, THRESHOLD_CLICK_SCALE)
-                    .compose());
-        } else if (Build.VERSION.SDK_INT >= 34) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Vibrator composer = composer(view);
+            if (composer != null) {
+                vibrate(composer, VibrationEffect.startComposition()
+                        .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, THRESHOLD_CLICK_SCALE)
+                        .compose());
+                return;
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 34) {
             view.performHapticFeedback(engaged ? HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE
                     : HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE);
         } else {
@@ -117,6 +121,9 @@ public final class Haptics {
         }
         long now = SystemClock.uptimeMillis();
         if (now - sLastTensionAt < TENSION_INTERVAL_MS || now - sLastThresholdAt < CLICK_GUARD_MS) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             return;
         }
         Vibrator composer = composer(view);
