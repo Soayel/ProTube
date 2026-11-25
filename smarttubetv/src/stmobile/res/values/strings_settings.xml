@@ -195,6 +195,9 @@
     <!-- Video quality -->
     <string name="mobile_settings_quality_intro">The quality videos start in. You can change it for one video from the player\'s settings.</string>
     <string name="mobile_settings_default_quality">Default quality</string>
+    <string name="mobile_settings_shorts_default_quality">Default Shorts resolution</string>
+    <string name="mobile_settings_shorts_quality_auto">Auto</string>
+    <string name="mobile_settings_shorts_quality_auto_desc">The best Shorts resolution your connection allows</string>
     <string name="mobile_settings_quality_auto">Auto (up to %1$dp)</string>
     <string name="mobile_settings_quality_auto_desc">Recommended. The best your connection allows</string>
     <string name="mobile_settings_quality_up_to">Up to %1$s</string>

@@ -212,9 +212,9 @@ final class AppPages {
         SidebarService sidebar = SidebarService.instance(context);
         Map<Integer, Integer> sections = sidebar.getDefaultSections();
 
-        int[] bottomBar = {MediaGroup.TYPE_HOME, MediaGroup.TYPE_SUBSCRIPTIONS, MediaGroup.TYPE_HISTORY, VideoDownloads.SECTION_ID};
+        int[] bottomBar = {MediaGroup.TYPE_HOME, MediaGroup.TYPE_SHORTS, MediaGroup.TYPE_SUBSCRIPTIONS, VideoDownloads.SECTION_ID};
         int[] you = {MediaGroup.TYPE_USER_PLAYLISTS, MediaGroup.TYPE_MY_VIDEOS, MediaGroup.TYPE_CHANNEL_UPLOADS,
-                MediaGroup.TYPE_PLAYBACK_QUEUE, MediaGroup.TYPE_BLOCKED_CHANNELS};
+                MediaGroup.TYPE_HISTORY, MediaGroup.TYPE_PLAYBACK_QUEUE, MediaGroup.TYPE_BLOCKED_CHANNELS};
 
         rows.add(SettingsRow.header(context.getString(R.string.mobile_settings_tabs_bottom_bar)));
         addSectionToggles(context, rows, sections, bottomBar, true);
@@ -246,7 +246,7 @@ final class AppPages {
                                           int[] order, boolean keepOrder) {
         SidebarService sidebar = SidebarService.instance(context);
         for (int sectionId : order) {
-            if (sectionId == MediaGroup.TYPE_SETTINGS || sectionId == MediaGroup.TYPE_SHORTS) {
+            if (sectionId == MediaGroup.TYPE_SETTINGS) {
                 continue;
             }
             Integer titleRes = null;

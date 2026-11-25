@@ -110,12 +110,6 @@ public class GeneralSettingsPresenter extends BasePresenter<Void> {
                 continue;
             }
 
-            // NEWTUBE(shorts): the phone has no Shorts - no section, and none in any list - so the
-            // row would do nothing there.
-            if (PhoneUi.isEnabled() && sectionId == MediaGroup.TYPE_SHORTS) {
-                continue;
-            }
-
             options.add(UiOptionItem.from(getContext().getString(sectionTitleRes(sectionResId)), optionItem -> {
                 BrowsePresenter.instance(getContext()).enableSection(sectionId, optionItem.isSelected());
             }, mSidebarService.isSectionPinned(sectionId)));

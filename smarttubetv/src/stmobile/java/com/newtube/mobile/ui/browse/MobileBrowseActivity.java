@@ -119,6 +119,8 @@ public class MobileBrowseActivity extends MobileActivity
      * {@link #ITEM_ID_OFFSET} + any real section id, so it can never collide with one.
      */
     private static final int YOU_ITEM_ID = 2_000_000;
+    /** Synthetic Shorts tab: it opens the dedicated vertical player, not a browse grid. */
+    private static final int SHORTS_ITEM_ID = 2_000_001;
     private static final int REQUEST_POST_NOTIFICATIONS = 1;
     /** Intent action (download notifications) that lands on the Downloads tab. */
     public static final String ACTION_OPEN_DOWNLOADS = "com.newtube.mobile.OPEN_DOWNLOADS";
@@ -132,13 +134,11 @@ public class MobileBrowseActivity extends MobileActivity
     private static final int[] PREFERRED_SECTION_IDS = {
             MediaGroup.TYPE_HOME,
             MediaGroup.TYPE_SUBSCRIPTIONS,
-            MediaGroup.TYPE_HISTORY,
             VideoDownloads.SECTION_ID,
     };
     private static final int[] PREFERRED_SECTION_TITLE_RES = {
             R.string.header_home,
             R.string.header_subscriptions,
-            R.string.header_history,
             R.string.header_downloads,
     };
 
@@ -954,7 +954,10 @@ public class MobileBrowseActivity extends MobileActivity
     }
 
     private void onNavItemChosen(int itemId) {
-        if (itemId == YOU_ITEM_ID) {
+        if (itemId == SHORTS_ITEM_ID) {
+            hideYouPanel();
+            startActivity(com.newtube.mobile.ui.shorts.MobileShortsActivity.intent(this));
+        } else if (itemId == YOU_ITEM_ID) {
             showYouPanel();
         } else {
             mSectionFromYou = false;
@@ -1041,6 +1044,7 @@ public class MobileBrowseActivity extends MobileActivity
             case MediaGroup.TYPE_CHANNEL_UPLOADS:
             case MediaGroup.TYPE_PLAYBACK_QUEUE:
             case MediaGroup.TYPE_NOTIFICATIONS:
+            case MediaGroup.TYPE_HISTORY:
                 return true;
             default:
                 return false;
@@ -1687,16 +1691,24 @@ public class MobileBrowseActivity extends MobileActivity
     private void rebuildBottomNav() {
         Menu menu = mBottomNav.getMenu();
         List<BrowseSection> navSections = selectNavSections();
+        boolean showShorts = com.liskovsoft.smartyoutubetv2.common.app.presenters.service.SidebarService
+                .instance(this).isSectionPinned(MediaGroup.TYPE_SHORTS);
 
         StringBuilder signature = new StringBuilder();
         for (BrowseSection section : navSections) {
             signature.append(toMenuItemId(section.getId())).append('\u0001')
                     .append(section.getTitle()).append('\u0001')
                     .append(navIconOrResFor(section)).append('\u0002');
+            if (showShorts && section.getId() == MediaGroup.TYPE_HOME) {
+                signature.append(SHORTS_ITEM_ID).append('\u0001')
+                        .append(getString(R.string.header_shorts)).append('\u0001')
+                        .append(R.drawable.ic_nav_shorts).append('\u0002');
+            }
         }
         String newSignature = signature.toString();
 
-        if (newSignature.equals(mNavSignature) && menu.size() == navSections.size() + 1) {
+        int expectedSize = navSections.size() + (showShorts ? 1 : 0) + 1;
+        if (newSignature.equals(mNavSignature) && menu.size() == expectedSize) {
             // Same tabs as on screen: only re-assert the highlight (the section may have moved).
             mSuppressNavCallback = true;
             reassertNavHighlight(menu, false);
@@ -1709,19 +1721,24 @@ public class MobileBrowseActivity extends MobileActivity
 
         menu.clear();
 
+        int order = 0;
         for (int i = 0; i < navSections.size(); i++) {
             BrowseSection section = navSections.get(i);
 
-            android.view.MenuItem item = menu.add(Menu.NONE, toMenuItemId(section.getId()), i, section.getTitle());
+            android.view.MenuItem item = menu.add(Menu.NONE, toMenuItemId(section.getId()), order++, section.getTitle());
 
             int icon = navIconOrResFor(section);
             if (icon > 0) {
                 item.setIcon(icon);
             }
+            if (showShorts && section.getId() == MediaGroup.TYPE_HOME) {
+                menu.add(Menu.NONE, SHORTS_ITEM_ID, order++, R.string.header_shorts)
+                        .setIcon(R.drawable.ic_nav_shorts);
+            }
         }
 
         // The synthetic You tab always sits last (account + extra sections + settings).
-        menu.add(Menu.NONE, YOU_ITEM_ID, navSections.size(), R.string.mobile_nav_you)
+        menu.add(Menu.NONE, YOU_ITEM_ID, order, R.string.mobile_nav_you)
                 .setIcon(R.drawable.ic_nav_you);
 
         // Re-assert the highlight after clear()/add() wiped it, so the current tab stays lit.

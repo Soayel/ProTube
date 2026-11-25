@@ -32,6 +32,7 @@ import com.liskovsoft.youtubeapi.service.internal.MediaServiceData;
 import com.newtube.mobile.player.SabrSourcePreference;
 import com.newtube.mobile.ui.playback.PlayerGesturePrefs;
 import com.newtube.mobile.ui.common.MobileSnackbar;
+import com.newtube.mobile.ui.shorts.ShortsPrefs;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -250,6 +251,7 @@ final class PlayerPages {
 
         rows.add(SettingsRow.note(context.getString(R.string.mobile_settings_quality_intro)));
         rows.add(defaultQuality(context));
+        rows.add(shortsDefaultQuality(context));
 
         rows.add(SettingsRow.header(context.getString(R.string.mobile_settings_audio)));
         rows.add(SettingsRow.toggle(context.getString(R.string.mobile_settings_loudness),
@@ -326,6 +328,22 @@ final class PlayerPages {
                 }
             }
         });
+    }
+
+    /** Independent Shorts cap; never changes PlayerData's main-video format. */
+    private static SettingsRow shortsDefaultQuality(Context context) {
+        SettingsRow.Choice<String> choice =
+                SettingsRow.choice(context.getString(R.string.mobile_settings_shorts_default_quality));
+        choice.option(context.getString(R.string.mobile_settings_shorts_quality_auto),
+                context.getString(R.string.mobile_settings_shorts_quality_auto_desc), ShortsPrefs.RESOLUTION_AUTO);
+        for (int height : new int[] {2160, 1440, 1080, 720, 480, 360}) {
+            choice.option(context.getString(R.string.mobile_settings_quality_up_to, resolutionName(height)),
+                    height <= 480 ? context.getString(R.string.mobile_settings_quality_data_saver)
+                            : context.getString(R.string.mobile_settings_quality_less_data),
+                    Integer.toString(height));
+        }
+        return choice.bind(() -> ShortsPrefs.getResolution(context),
+                resolution -> ShortsPrefs.setResolution(context, resolution));
     }
 
     /** Same as the TV presets list: a pick also clears "Force legacy codecs". */

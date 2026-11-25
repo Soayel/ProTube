@@ -929,6 +929,14 @@ public class Media3SourceFactory {
 
     /** DASH VOD from InnerTube formats via the generated MPD. Null if the manifest can't be built. */
     @Nullable
+    public MediaSource createDashSource(MediaItemFormatInfo formatInfo) {
+        return fromDashFormatInfo(formatInfo);
+    }
+
+    public MediaSource createUrlSource(List<String> urlList) {
+        return fromUrlList(urlList);
+    }
+
     MediaSource fromDashFormatInfo(MediaItemFormatInfo formatInfo) {
         return fromDashFormatInfo(formatInfo, null);
     }
