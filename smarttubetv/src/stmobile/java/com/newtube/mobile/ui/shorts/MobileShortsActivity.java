@@ -135,12 +135,10 @@ public class MobileShortsActivity extends AppCompatActivity {
 
     private void setupPlayer() {
         Media3PlayerInitializer initializer = new Media3PlayerInitializer(this);
-        mTrackSelector = initializer.createTrackSelector();
-        androidx.media3.exoplayer.analytics.DefaultBandwidthMeter meter =
-                new androidx.media3.exoplayer.analytics.DefaultBandwidthMeter.Builder(this).build();
-        mPlayer = initializer.createPlayer(mTrackSelector, meter);
-        mPlayer.setRepeatMode(Player.REPEAT_MODE_ONE);
         mSourceFactory = new Media3SourceFactory(this);
+        mTrackSelector = initializer.createTrackSelector();
+        mPlayer = initializer.createPlayer(mTrackSelector, mSourceFactory.getBandwidthMeter());
+        mPlayer.setRepeatMode(Player.REPEAT_MODE_ONE);
 
         String resolution = ShortsPrefs.getResolution(this);
         if (!ShortsPrefs.RESOLUTION_AUTO.equals(resolution)) {
@@ -323,7 +321,7 @@ public class MobileShortsActivity extends AppCompatActivity {
             Intent share = new Intent(Intent.ACTION_SEND);
             share.setType("text/plain");
             share.putExtra(Intent.EXTRA_TEXT, "https://youtube.com/watch?v=" + video.videoId);
-            startActivity(Intent.createChooser(share, getString(R.string.action_share)));
+            startActivity(Intent.createChooser(share, getString(R.string.mobile_watch_share)));
         });
         holder.save.setOnClickListener(v -> toggleSave(video, holder));
         holder.overflow.setOnClickListener(v -> showOverflow(video));
@@ -357,7 +355,8 @@ public class MobileShortsActivity extends AppCompatActivity {
         if (!YouTubeSignInService.instance().isSigned()) return;
         boolean active = holder.like.getTag() == Boolean.TRUE;
         MediaItemService service = YouTubeServiceManager.instance().getMediaItemService();
-        mDisposables.add((active ? service.removeLikeObserve(video.videoId) : service.setLikeObserve(video.videoId))
+        if (video.mediaItem == null) return;
+        mDisposables.add((active ? service.removeLikeObserve(video.mediaItem) : service.setLikeObserve(video.mediaItem))
                 .subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
                 .subscribe(unused -> {
                     holder.like.setTag(!active);
@@ -373,7 +372,8 @@ public class MobileShortsActivity extends AppCompatActivity {
         if (!YouTubeSignInService.instance().isSigned()) return;
         boolean active = holder.dislike.getTag() == Boolean.TRUE;
         MediaItemService service = YouTubeServiceManager.instance().getMediaItemService();
-        mDisposables.add((active ? service.removeDislikeObserve(video.videoId) : service.setDislikeObserve(video.videoId))
+        if (video.mediaItem == null) return;
+        mDisposables.add((active ? service.removeDislikeObserve(video.mediaItem) : service.setDislikeObserve(video.mediaItem))
                 .subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread())
                 .subscribe(unused -> {
                     holder.dislike.setTag(!active);

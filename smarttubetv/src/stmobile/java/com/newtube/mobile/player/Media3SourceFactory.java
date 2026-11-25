@@ -386,7 +386,7 @@ public class Media3SourceFactory {
     @Nullable
     private static String sCronetBypassLoggedEpisode;
 
-    Media3SourceFactory(Context context) {
+    public Media3SourceFactory(Context context) {
         mContext = context.getApplicationContext();
         mBandwidthMeter = getOrCreateBandwidthMeter(mContext);
 
