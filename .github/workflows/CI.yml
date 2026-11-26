@@ -1,8 +1,10 @@
-name: Build Debug APK
+name: Build ProTube Release APK
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -28,9 +30,10 @@ jobs:
       - name: Update Version Name
         id: get_version
         run: |
-          # Keep the original code to make the nightly and original builds interchangeable
+          # Keep the build's version identifiable while producing a nightly APK.
           sed -i "s/versionName \"\(.*\)\"/versionName \"\1-nightly-${{ github.run_number }}\"/" smarttubetv/build.gradle
-          echo "VERSION_NAME=$(grep "versionName" smarttubetv/build.gradle | head -n 1 | awk -F'"' '{print $2}')" >> $GITHUB_OUTPUT
+          version_name=$(awk '/productFlavors[[:space:]]*\{/ { in_flavors=1 } in_flavors && /versionName[[:space:]]/ { gsub(/"/, "", $2); print $2; exit }' smarttubetv/build.gradle)
+          echo "VERSION_NAME=$version_name" >> "$GITHUB_OUTPUT"
 
       - name: Configure Build Signing
         if: ${{ env.HAS_SIGNING_KEY == 'true' }}
@@ -62,7 +65,7 @@ jobs:
         with:
           vt_api_key: ${{ secrets.VIRUS_TOTAL_API_KEY }}
           files: |
-            ./smarttubetv/build/outputs/renamed_apks/stmobileDebug/*.apk
+            ./smarttubetv/build/outputs/renamed_apks/stmobileRelease/*.apk
           request_rate: 4
 
       - name: VirusTotal Summary
@@ -75,7 +78,7 @@ jobs:
           echo "| Artifact Name | VirusTotal Status | Detailed Report |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
 
-          for apk in ./smarttubetv/build/outputs/renamed_apks/stmobileDebug/*.apk; do
+          for apk in ./smarttubetv/build/outputs/renamed_apks/stmobileRelease/*.apk; do
             filename=$(basename "$apk")
             sha256=$(sha256sum "$apk" | awk '{print $1}')
 
@@ -89,27 +92,27 @@ jobs:
       - name: Upload ARM64 APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube_${{ steps.get_version.outputs.VERSION_NAME }}_arm64
-          path: ./smarttubetv/build/outputs/renamed_apks/stmobileDebug/*_arm64-v8a.apk
+          name: ProTube_${{ steps.get_version.outputs.VERSION_NAME }}_arm64
+          path: ./smarttubetv/build/outputs/renamed_apks/stmobileRelease/*_arm64-v8a.apk
           if-no-files-found: error
 
       - name: Upload ARMv7 APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube_${{ steps.get_version.outputs.VERSION_NAME }}_armeabi-v7a
-          path: ./smarttubetv/build/outputs/renamed_apks/stmobileDebug/*_armeabi-v7a.apk
+          name: ProTube_${{ steps.get_version.outputs.VERSION_NAME }}_armeabi-v7a
+          path: ./smarttubetv/build/outputs/renamed_apks/stmobileRelease/*_armeabi-v7a.apk
           if-no-files-found: error
 
       - name: Upload Universal APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube_${{ steps.get_version.outputs.VERSION_NAME }}_universal
-          path: ./smarttubetv/build/outputs/renamed_apks/stmobileDebug/*_universal.apk
+          name: ProTube_${{ steps.get_version.outputs.VERSION_NAME }}_universal
+          path: ./smarttubetv/build/outputs/renamed_apks/stmobileRelease/*_universal.apk
           if-no-files-found: error
 
       - name: Upload x86 APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube_${{ steps.get_version.outputs.VERSION_NAME }}_x86
-          path: ./smarttubetv/build/outputs/renamed_apks/stmobileDebug/*_x86.apk
+          name: ProTube_${{ steps.get_version.outputs.VERSION_NAME }}_x86
+          path: ./smarttubetv/build/outputs/renamed_apks/stmobileRelease/*_x86.apk
           if-no-files-found: error
