@@ -5,9 +5,6 @@
 # ProTube
 
 **A phone-first video app based on SmartTube.**
-
-# 🚀 ProTube
-
 ### The YouTube Alternative You've Been Looking For.
 
 A lightweight, ad-free video experience built on the foundation of SmartTube. Enjoy seamless video browsing, background playback, high-quality streaming, and a smooth interface without unnecessary trackers.
