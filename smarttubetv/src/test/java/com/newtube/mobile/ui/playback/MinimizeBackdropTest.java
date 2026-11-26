@@ -39,9 +39,9 @@ public class MinimizeBackdropTest {
     @Test
     public void watchContentFadesSymmetricallyAsTheVideoMovesBetweenCardAndFullscreen() {
         assertEquals(0f, MobilePlaybackActivity.morphContentAlpha(1f), EPS);
-        assertEquals(0.104f, MobilePlaybackActivity.morphContentAlpha(0.8f), EPS);
-        assertEquals(0.5f, MobilePlaybackActivity.morphContentAlpha(0.5f), EPS);
-        assertEquals(0.896f, MobilePlaybackActivity.morphContentAlpha(0.2f), EPS);
+        assertEquals(0.36f, MobilePlaybackActivity.morphContentAlpha(0.8f), EPS);
+        assertEquals(0.75f, MobilePlaybackActivity.morphContentAlpha(0.5f), EPS);
+        assertEquals(0.96f, MobilePlaybackActivity.morphContentAlpha(0.2f), EPS);
         assertEquals(1f, MobilePlaybackActivity.morphContentAlpha(0f), EPS);
     }
 

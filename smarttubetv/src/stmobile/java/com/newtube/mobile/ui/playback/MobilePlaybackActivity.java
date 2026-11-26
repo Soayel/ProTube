@@ -5873,10 +5873,10 @@ public class MobilePlaybackActivity extends MobileActivity
         return overOwnBackdrop ? 1f : 1f - f;
     }
 
-    /** Fade stationary watch content in only as the video nears its full-screen position. */
+    /** Fade stationary watch content in smoothly as the video expands. */
     static float morphContentAlpha(float f) {
         float visible = 1f - Math.max(0f, Math.min(1f, f));
-        return visible * visible * (3f - 2f * visible);
+        return visible * (2f - visible);
     }
 
     /**
