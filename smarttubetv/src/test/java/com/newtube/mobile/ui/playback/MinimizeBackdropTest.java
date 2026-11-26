@@ -35,4 +35,19 @@ public class MinimizeBackdropTest {
         assertEquals(1f, MobilePlaybackActivity.morphBackdropAlpha(0.4f, true), EPS);
         assertEquals(1f, MobilePlaybackActivity.morphBackdropAlpha(1f, true), EPS);
     }
+
+    @Test
+    public void watchContentFadesSymmetricallyAsTheVideoMovesBetweenCardAndFullscreen() {
+        assertEquals(0f, MobilePlaybackActivity.morphContentAlpha(1f), EPS);
+        assertEquals(0.104f, MobilePlaybackActivity.morphContentAlpha(0.8f), EPS);
+        assertEquals(0.5f, MobilePlaybackActivity.morphContentAlpha(0.5f), EPS);
+        assertEquals(0.896f, MobilePlaybackActivity.morphContentAlpha(0.2f), EPS);
+        assertEquals(1f, MobilePlaybackActivity.morphContentAlpha(0f), EPS);
+    }
+
+    @Test
+    public void watchContentAlphaClampsSpringOvershoot() {
+        assertEquals(0f, MobilePlaybackActivity.morphContentAlpha(1.1f), EPS);
+        assertEquals(1f, MobilePlaybackActivity.morphContentAlpha(-0.1f), EPS);
+    }
 }

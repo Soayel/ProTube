@@ -5842,9 +5842,8 @@ public class MobilePlaybackActivity extends MobileActivity
         float settled = Math.min(1f, f);
         applyMorphCorners(settled, Math.min(sx, sy), density);
 
-        // Fade the watch content in step with the video so the description and Up next emerge
-        // throughout the expand morph instead of popping in near its end.
-        float contentAlpha = Math.max(0f, Math.min(1f, 1f - f));
+        // Keep description and Up next at their fullscreen positions; only fade them with the morph.
+        float contentAlpha = morphContentAlpha(f);
         if (mWatchContent != null) {
             mWatchContent.setAlpha(contentAlpha);
         }
@@ -5872,6 +5871,12 @@ public class MobilePlaybackActivity extends MobileActivity
      */
     static float morphBackdropAlpha(float f, boolean overOwnBackdrop) {
         return overOwnBackdrop ? 1f : 1f - f;
+    }
+
+    /** Fade stationary watch content in only as the video nears its full-screen position. */
+    static float morphContentAlpha(float f) {
+        float visible = 1f - Math.max(0f, Math.min(1f, f));
+        return visible * visible * (3f - 2f * visible);
     }
 
     /**
