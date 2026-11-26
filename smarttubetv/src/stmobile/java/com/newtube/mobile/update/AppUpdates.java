@@ -457,6 +457,9 @@ public final class AppUpdates implements AppUpdateCheckerListener {
      * automatic checks are still on (with them off, a remembered update doesn't keep nudging).
      */
     public boolean hasUpdate() {
+        if (!BuildConfig.IN_APP_UPDATES) {
+            return false;
+        }
         if (mInfo != null) {
             return mInfo.versionCode > mInstalledCode;
         }

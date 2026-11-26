@@ -48,7 +48,7 @@ abstract class CopyRenamedApks extends DefaultTask {
         builtArtifacts.elements.each { artifact ->
             def abi = artifact.filters.find { it.filterType.toString() == 'ABI' }?.identifier ?: 'universal'
             def version = artifact.versionName ?: 'unknown'
-            def outputFile = new File(outputDirectory, "NewTube_${version}_${nameTag.get()}${abi}.apk")
+            def outputFile = new File(outputDirectory, "ProTube_${version}_${nameTag.get()}${abi}.apk")
             Files.copy(new File(artifact.outputFile).toPath(), outputFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
     }
@@ -169,9 +169,8 @@ android {
         def sourceDateEpoch = System.getenv('SOURCE_DATE_EPOCH')
         buildConfigField "long", "TIMESTAMP", (sourceDateEpoch ? (sourceDateEpoch as long) * 1000L : System.currentTimeMillis()) + "L"
         buildConfigField "boolean", "BENCHMARK", "false"
-        // NEWTUBE(fdroid): -Pfdroid turns the in-app updater off - F-Droid delivers the updates, and
-        // its inclusion policy forbids self-updates that aren't an explicit opt-in.
-        buildConfigField "boolean", "IN_APP_UPDATES", project.hasProperty('fdroid') ? "false" : "true"
+        // ProTube builds do not check for or notify about in-app updates.
+        buildConfigField "boolean", "IN_APP_UPDATES", "false"
 
         // The content of Universal apk
         ndk {
@@ -303,11 +302,9 @@ android {
     // flavor so its source set (src/stmobile/) keeps applying without a directory move.
     productFlavors {
         stmobile {
-            // Brand-neutral, GitHub-verifiable applicationId (io.github.<user>.*) chosen so the
-            // package name never has to change if the app is ever renamed — "arc" ties to the
-            // arch-"n" launcher mark (Catalan for "arch"). This ID is permanent once released;
-            // do not couple it to the marketing name. See docs/gtm + the legal-risk memo.
-            applicationId "io.github.aleixrodriala.arc"
+            // ProTube's Android application ID. Android treats this as a separate app from the
+            // previous package ID; keep the Java namespace above unchanged.
+            applicationId "com.protube.pro"
             minSdk = 24 // media3 1.10.x floor is 23; 24 = project-wide minimum
             targetSdk = project.ext.targetSdkVersion
             // NewTube versions independently of upstream SmartTube (defaultConfig carries the

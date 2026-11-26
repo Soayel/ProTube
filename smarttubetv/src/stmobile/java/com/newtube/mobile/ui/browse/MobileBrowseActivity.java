@@ -390,7 +390,7 @@ public class MobileBrowseActivity extends MobileActivity
         // the card for the whole activity-switch latency.
         View.OnClickListener expand = v -> {
             if (!mMiniClosing && MiniPlayerBridge.isActive()) { // not while a closed card leaves
-                MiniPlayerBridge.expand(this);
+                expandMiniPlayer();
             }
         };
         mMiniPlayerBar.setOnClickListener(expand);
@@ -405,7 +405,7 @@ public class MobileBrowseActivity extends MobileActivity
         });
 
         findViewById(R.id.mobile_mini_close).setOnClickListener(v -> closeMiniPlayer());
-        // NEWTUBE(motion): or swipe the card away sideways.
+        // NEWTUBE(motion): swipe away left/right/down, or up to expand.
         mMiniSwipe = com.newtube.mobile.ui.playback.MiniCardSwipe.attach(mMiniPlayerBar,
                 new com.newtube.mobile.ui.playback.MiniCardSwipe.Callback() {
                     @Override
@@ -414,10 +414,27 @@ public class MobileBrowseActivity extends MobileActivity
                     }
 
                     @Override
-                    public void onSwipedAway(float toTranslationX, long durationMs) {
-                        closeMiniPlayer(toTranslationX, durationMs);
+                    public void onSwipedAway(float targetTranslation, boolean vertical, long durationMs) {
+                        closeMiniPlayer(targetTranslation, vertical, durationMs);
+                    }
+
+                    @Override
+                    public void onSwipedUp() {
+                        if (!mMiniClosing && MiniPlayerBridge.isActive()) {
+                            expandMiniPlayer();
+                        }
                     }
                 }, mMiniPlayerFrame, mMiniPlayerBar);
+    }
+
+    private void expandMiniPlayer() {
+        if (mMiniPlayerBar.getWidth() > 0 && mMiniPlayerBar.getHeight() > 0) {
+            int[] location = new int[2];
+            mMiniPlayerBar.getLocationOnScreen(location);
+            MiniPlayerBridge.setMiniBounds(new android.graphics.Rect(location[0], location[1],
+                    location[0] + mMiniPlayerBar.getWidth(), location[1] + mMiniPlayerBar.getHeight()));
+        }
+        MiniPlayerBridge.expand(this);
     }
 
     /**
@@ -432,11 +449,11 @@ public class MobileBrowseActivity extends MobileActivity
     private com.newtube.mobile.ui.playback.MiniCardSwipe mMiniSwipe;
 
     private void closeMiniPlayer() {
-        closeMiniPlayer(null, 0);
+        closeMiniPlayer(null, false, 0);
     }
 
-    /** {@code flyToX}: swiped away - the card keeps going off that side instead of shrinking. */
-    private void closeMiniPlayer(@androidx.annotation.Nullable Float flyToX, long flyMs) {
+    /** A swipe keeps going off its chosen edge instead of shrinking. */
+    private void closeMiniPlayer(@androidx.annotation.Nullable Float flyTo, boolean vertical, long flyMs) {
         if (mMiniClosing) {
             return;
         }
@@ -450,8 +467,9 @@ public class MobileBrowseActivity extends MobileActivity
         detachMiniTexture();
         stopMiniSwipe();
         mMiniPlayerBar.animate().cancel();
-        android.view.ViewPropertyAnimator exit = flyToX != null
-                ? mMiniPlayerBar.animate().translationX(flyToX).alpha(0f).setDuration(flyMs)
+        android.view.ViewPropertyAnimator exit = flyTo != null
+                ? (vertical ? mMiniPlayerBar.animate().translationY(flyTo)
+                        : mMiniPlayerBar.animate().translationX(flyTo)).alpha(0f).setDuration(flyMs)
                         .setInterpolator(new android.view.animation.LinearInterpolator())
                 : mMiniPlayerBar.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f)
                         .setDuration(Motion.EXIT_MS).setInterpolator(Motion.EMPHASIZED_ACCELERATE);
@@ -510,6 +528,7 @@ public class MobileBrowseActivity extends MobileActivity
         mMiniPlayerBar.setScaleX(1f);
         mMiniPlayerBar.setScaleY(1f);
         mMiniPlayerBar.setTranslationX(0f);
+        mMiniPlayerBar.setTranslationY(0f);
         mMiniPlayerBar.setVisibility(View.VISIBLE);
         updateMiniPlayPauseIcon(player);
 
@@ -702,6 +721,7 @@ public class MobileBrowseActivity extends MobileActivity
         mMiniPlayerBar.setScaleX(1f);
         mMiniPlayerBar.setScaleY(1f);
         mMiniPlayerBar.setTranslationX(0f);
+        mMiniPlayerBar.setTranslationY(0f);
         mMiniButtonsFadePending = false;
         setMiniButtonsAlpha(1f);
     }

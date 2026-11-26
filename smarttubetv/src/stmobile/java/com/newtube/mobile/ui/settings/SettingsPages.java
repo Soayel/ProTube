@@ -4,16 +4,9 @@ import android.content.Context;
 
 import androidx.annotation.NonNull;
 
-import com.liskovsoft.appupdatechecker2.AppUpdateChecker;
 import com.liskovsoft.mediaserviceinterfaces.oauth.Account;
-import com.liskovsoft.sharedutils.helpers.AppInfoHelpers;
-import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.OptionItem;
-import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.AppUpdatePresenter;
-import com.liskovsoft.smartyoutubetv2.common.misc.DiagnosticLog;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
-import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.smartyoutubetv2.tv.R;
-import com.newtube.mobile.ui.about.AboutShareRows;
 import com.newtube.mobile.ui.browse.AccountsSheet;
 import com.newtube.mobile.ui.common.ThemeMode;
 
@@ -31,7 +24,7 @@ import java.util.List;
  *   Account                      (the accounts sheet)
  *   App:    General · Tabs and feeds · History and privacy
  *   Video:  Playback · Video quality · Captions · SponsorBlock · DeArrow
- *   Other:  Backup and restore · Advanced · About
+ *   Other:  Backup and restore · Advanced
  * </pre>
  */
 public final class SettingsPages {
@@ -50,7 +43,6 @@ public final class SettingsPages {
     public static final String DEARROW = "dearrow";
     public static final String BACKUP = "backup";
     public static final String ADVANCED = "advanced";
-    public static final String ABOUT = "about";
 
     /** A built page: its title and rows. */
     public static final class Page {
@@ -97,8 +89,6 @@ public final class SettingsPages {
                 return AppPages.backup(context);
             case ADVANCED:
                 return PlayerPages.advanced(context);
-            case ABOUT:
-                return about(context);
             case ROOT:
             default:
                 return root(context);
@@ -142,9 +132,6 @@ public final class SettingsPages {
                 context.getString(R.string.mobile_settings_backup_summary), BACKUP));
         rows.add(SettingsRow.page(R.drawable.ic_settings_advanced, context.getString(R.string.mobile_settings_advanced),
                 context.getString(R.string.mobile_settings_advanced_summary), ADVANCED));
-        rows.add(SettingsRow.page(R.drawable.ic_settings_about, context.getString(R.string.mobile_settings_about),
-                versionLine(context), ABOUT));
-
         return new Page(context.getString(R.string.header_settings), rows);
     }
 
@@ -156,39 +143,4 @@ public final class SettingsPages {
         return context.getString(R.string.mobile_settings_general_summary_value, themeLabel);
     }
 
-    private static String versionLine(Context context) {
-        return context.getString(R.string.app_name) + " " + AppInfoHelpers.getAppVersionName(context);
-    }
-
-    private static Page about(Context context) {
-        List<SettingsRow> rows = new ArrayList<>();
-
-        if (AppUpdatePresenter.isInAppUpdatesDisabled()) {
-            // Store build (-Pfdroid): the version stays, the update row and switch go.
-            rows.add(SettingsRow.action(context.getString(R.string.mobile_settings_version), versionLine(context), page -> { }));
-        } else {
-            rows.add(SettingsRow.action(context.getString(R.string.check_for_updates), versionLine(context),
-                    page -> AppUpdatePresenter.instance(page.requireContext()).start(true)));
-            AppUpdateChecker checker = new AppUpdateChecker(context, null);
-            rows.add(SettingsRow.toggle(context.getString(R.string.check_updates_auto),
-                    context.getString(R.string.mobile_settings_update_notify_summary),
-                    checker::isUpdateCheckEnabled, checker::setUpdateCheckEnabled));
-        }
-
-        rows.add(SettingsRow.divider());
-        rows.add(SettingsRow.action(context.getString(R.string.diagnostic_log_send),
-                context.getString(R.string.diagnostic_log_send_desc),
-                page -> DiagnosticLog.share(page.requireContext())));
-        for (OptionItem item : AboutShareRows.create(context)) {
-            rows.add(SettingsRow.action(item.getTitle(), item.getDescription(), page -> item.onSelect(true)));
-        }
-        rows.add(SettingsRow.action(context.getString(R.string.about_source_code),
-                context.getString(R.string.about_source_code_url).replace("https://", ""),
-                page -> Utils.openLinkExt(page.requireContext(), context.getString(R.string.about_source_code_url))));
-        rows.add(SettingsRow.action(context.getString(R.string.about_license),
-                context.getString(R.string.about_license_name),
-                page -> Utils.openLinkExt(page.requireContext(), context.getString(R.string.about_license_url))));
-
-        return new Page(context.getString(R.string.about_app, context.getString(R.string.app_name)), rows);
-    }
 }

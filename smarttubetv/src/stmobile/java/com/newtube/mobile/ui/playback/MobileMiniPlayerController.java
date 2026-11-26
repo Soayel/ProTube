@@ -81,8 +81,7 @@ public final class MobileMiniPlayerController {
             if (mClosing || !MiniPlayerBridge.isActive()) {
                 return; // a closed card leaving
             }
-            publishBounds();
-            MiniPlayerBridge.expand(mActivity);
+            expand();
         };
         mBar.setOnClickListener(expand);
         mFrame.setOnClickListener(expand);
@@ -96,7 +95,7 @@ public final class MobileMiniPlayerController {
         });
 
         mClose.setOnClickListener(v -> close());
-        // NEWTUBE(motion): or swipe the card away sideways.
+        // NEWTUBE(motion): swipe away left/right/down, or up to expand.
         mSwipe = MiniCardSwipe.attach(mBar, new MiniCardSwipe.Callback() {
             @Override
             public boolean canSwipe() {
@@ -104,10 +103,22 @@ public final class MobileMiniPlayerController {
             }
 
             @Override
-            public void onSwipedAway(float toTranslationX, long durationMs) {
-                close(toTranslationX, durationMs);
+            public void onSwipedAway(float targetTranslation, boolean vertical, long durationMs) {
+                close(targetTranslation, vertical, durationMs);
+            }
+
+            @Override
+            public void onSwipedUp() {
+                if (!mClosing && MiniPlayerBridge.isActive()) {
+                    expand();
+                }
             }
         }, mFrame, mBar);
+    }
+
+    private void expand() {
+        publishBounds();
+        MiniPlayerBridge.expand(mActivity);
     }
 
     /**
@@ -119,11 +130,11 @@ public final class MobileMiniPlayerController {
     private float mVolumeBeforeClose = 1f;
 
     private void close() {
-        close(null, 0);
+        close(null, false, 0);
     }
 
-    /** {@code flyToX}: swiped away - the card keeps going off that side instead of shrinking. */
-    private void close(@androidx.annotation.Nullable Float flyToX, long flyMs) {
+    /** A swipe keeps going off its chosen edge instead of shrinking. */
+    private void close(@androidx.annotation.Nullable Float flyTo, boolean vertical, long flyMs) {
         if (mClosing) {
             return;
         }
@@ -138,8 +149,9 @@ public final class MobileMiniPlayerController {
         mSwipe.stop();
         mBar.animate().cancel();
         android.view.ViewPropertyAnimator exit;
-        if (flyToX != null) {
-            exit = mBar.animate().translationX(flyToX).alpha(0f).setDuration(flyMs)
+        if (flyTo != null) {
+            exit = (vertical ? mBar.animate().translationY(flyTo) : mBar.animate().translationX(flyTo))
+                    .alpha(0f).setDuration(flyMs)
                     .setInterpolator(new android.view.animation.LinearInterpolator());
         } else {
             resetTransform();
@@ -210,6 +222,7 @@ public final class MobileMiniPlayerController {
         mBar.setScaleX(1f);
         mBar.setScaleY(1f);
         mBar.setTranslationX(0f); // a card swiped away (MiniCardSwipe)
+        mBar.setTranslationY(0f);
 
         mEntryAnimating = animateFromPlayer;
         mTextureHasFrame = false;

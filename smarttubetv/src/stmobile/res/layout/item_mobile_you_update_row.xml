@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The You tab's update row: first in the list while a newer NewTube is known, downloading or
+<!-- The You tab's update row: first in the list while a newer ProTube is known, downloading or
      ready to install; opens the update sheet. Wired in MobileBrowseActivity.addYouUpdateRow. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
