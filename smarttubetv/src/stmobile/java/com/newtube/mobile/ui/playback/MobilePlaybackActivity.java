@@ -1545,6 +1545,11 @@ public class MobilePlaybackActivity extends MobileActivity
                 } else {
                     computeMorphTarget();
                 }
+                if (mWatchContent != null) {
+                    mWatchContent.animate().cancel();
+                    mWatchContent.setAlpha(0f);
+                }
+                mRevealWatchContentAfterMorph = true;
                 applyMorph(1f);
                 mContainer.setVisibility(View.VISIBLE);
                 // NEWTUBE(motion): the host kept its card up, frozen (MiniPlayerBridge
@@ -1553,8 +1558,7 @@ public class MobilePlaybackActivity extends MobileActivity
                 FrameGate.afterNextFrame(mContainer, HOST_CARD_FOLD_WAIT_MS,
                         () -> MiniPlayerBridge.foldHostCard(() -> {
                             if (!isFinishing() && !isDestroyed() && mMorphAnimator == null) {
-                                // Keep the expansion moving; EMPHASIZED reaches its endpoint too early.
-                                animateMorph(0f, 250, Motion.STANDARD, this::resetMorph);
+                                animateMorph(0f, 250, Motion.STANDARD, this::finishMiniPlayerExpansion);
                             }
                         }));
             });
@@ -5657,6 +5661,7 @@ public class MobilePlaybackActivity extends MobileActivity
     private float mMorphTx;
     private float mMorphTy;
     private float mMorphFraction;
+    private boolean mRevealWatchContentAfterMorph;
     private ValueAnimator mMorphAnimator;
     /**
      * NEWTUBE(no-host-minimize): this drag has nothing of ours underneath - a cold share link
@@ -5842,10 +5847,8 @@ public class MobilePlaybackActivity extends MobileActivity
         float settled = Math.min(1f, f);
         applyMorphCorners(settled, Math.min(sx, sy), density);
 
-        // Fade the watch content in step with the video so the description and Up next emerge
-        // throughout the expand morph instead of popping in near its end.
         float contentAlpha = Math.max(0f, Math.min(1f, 1f - f));
-        if (mWatchContent != null) {
+        if (mWatchContent != null && !mRevealWatchContentAfterMorph) {
             mWatchContent.setAlpha(contentAlpha);
         }
         float backdrop = morphBackdropAlpha(settled, mMorphOverOwnBackdrop); // NEWTUBE(no-host-minimize)
@@ -5917,7 +5920,22 @@ public class MobilePlaybackActivity extends MobileActivity
         mMorphCornerLocalPx = 0f;
     }
 
+    private void finishMiniPlayerExpansion() {
+        resetMorph(false);
+        if (mWatchContent != null) {
+            mWatchContent.animate()
+                    .alpha(1f)
+                    .setDuration(Motion.FADE_IN_MS)
+                    .setInterpolator(Motion.STANDARD)
+                    .start();
+        }
+    }
+
     private void resetMorph() {
+        resetMorph(true);
+    }
+
+    private void resetMorph(boolean showWatchContent) {
         if (mMorphAnimator != null) {
             mMorphAnimator.cancel();
             mMorphAnimator = null;
@@ -5933,6 +5951,7 @@ public class MobilePlaybackActivity extends MobileActivity
         }
         mMorphFraction = 0f;
         mMorphOverOwnBackdrop = false;
+        mRevealWatchContentAfterMorph = false;
         mVideoArea.setScaleX(1f);
         mVideoArea.setScaleY(1f);
         mVideoArea.setTranslationX(0f);
@@ -5940,7 +5959,8 @@ public class MobilePlaybackActivity extends MobileActivity
         mVideoArea.setTranslationZ(0f);
         restoreVideoAreaOutline();
         if (mWatchContent != null) {
-            mWatchContent.setAlpha(1f);
+            mWatchContent.animate().cancel();
+            mWatchContent.setAlpha(showWatchContent ? 1f : 0f);
         }
         if (mWatchScroll != null && mWatchScroll.getBackground() != null) {
             mWatchScroll.getBackground().mutate().setAlpha(255);
@@ -6100,6 +6120,9 @@ public class MobilePlaybackActivity extends MobileActivity
 
     /** Start a minimize morph: the drag's first move, a back gesture or Back itself. */
     private void beginMinimizeMorph() {
+        if (mWatchContent != null) {
+            mWatchContent.animate().cancel();
+        }
         computeMorphTarget(); // anchor the corner path once per morph
         // NEWTUBE(no-host-minimize): nothing of ours beneath - see the field doc.
         mMorphOverOwnBackdrop = MiniPlayerBridge.getMiniHost() == null;
