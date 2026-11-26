@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="app_icon_background">#1E2A78</color>
+
     <!-- NEWTUBE(theme): these are the LIGHT values; values-night/colors_mobile.xml holds the dark
          ones (the palette the app shipped before the Theme setting, unchanged). A colour with no
          night entry is the same in both themes: the accent, and everything drawn over pictures. -->

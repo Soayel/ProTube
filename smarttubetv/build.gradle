@@ -128,6 +128,28 @@ def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
+def validateStmobileReleaseSigning = tasks.register('validateStmobileReleaseSigning') {
+    doLast {
+        if (!keystorePropertiesFile.isFile()) {
+            throw new GradleException(
+                    'The stmobile release APK requires the private keystore.properties file. ' +
+                    'Use assembleStmobileDebug for local device testing.')
+        }
+
+        def requiredProperties = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword']
+        def missingProperties = requiredProperties.findAll {
+            !keystoreProperties.getProperty(it)?.trim()
+        }
+        if (!missingProperties.isEmpty()) {
+            throw new GradleException(
+                    "keystore.properties is missing required properties: ${missingProperties.join(', ')}")
+        }
+
+        if (!file(keystoreProperties.getProperty('storeFile')).isFile()) {
+            throw new GradleException('The keystore.properties storeFile does not exist.')
+        }
+    }
+}
 
 android {
     // NOTE: this is the R package the code imports (unchanged from the TV era on purpose).
@@ -485,6 +507,9 @@ android.sourceSets.androidTest.java.srcDir(sabrProofGeneratedJava.get().asFile)
 android.sourceSets.test.java.srcDir(sabrProofGeneratedJava.get().asFile)
 android.sourceSets.test.java.srcDir('src/androidTest/java/com/newtube/mobile/sabrproof')
 tasks.configureEach {
+    if (name.startsWith('packageStmobileRelease') && !name.endsWith('Resources')) {
+        dependsOn(validateStmobileReleaseSigning)
+    }
     if (name.startsWith('compile') && (name.endsWith('AndroidTestJavaWithJavac')
             || name.endsWith('UnitTestJavaWithJavac') || name.endsWith('AndroidTestKotlin')
             || name.endsWith('UnitTestKotlin'))) {

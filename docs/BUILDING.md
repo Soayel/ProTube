@@ -22,6 +22,11 @@ git clone --recurse-submodules https://github.com/aleixrodriala/newtube.git
 #   smarttubetv/build/outputs/renamed_apks/stmobileRelease/
 ```
 
+The release build requires the private `keystore.properties` file; without it, Android cannot
+install the APK because it is unsigned. The release task now stops with an error instead of
+leaving an invalid APK. Use the debug build for local testing, and do not replace the release key
+with a newly generated one if the APK must update an existing installation.
+
 Install on a connected device, always naming the device:
 
 ```bash
