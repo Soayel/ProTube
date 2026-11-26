@@ -49,6 +49,9 @@ Settings
 Things that are per video stay in the player, not here: quality for this video, audio track,
 speed, captions on/off, zoom (gear › More › Zoom / aspect ratio, or pinch).
 
+The Settings activity keeps `ProTube.Customized by Soayel` in a quiet footer below each page,
+including search.
+
 ## Search
 
 A "Search settings" bar at the top of the top level opens a search page (`SettingsSearch`, the index;

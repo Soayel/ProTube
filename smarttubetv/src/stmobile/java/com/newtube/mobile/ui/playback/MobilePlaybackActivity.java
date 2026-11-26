@@ -1553,7 +1553,8 @@ public class MobilePlaybackActivity extends MobileActivity
                 FrameGate.afterNextFrame(mContainer, HOST_CARD_FOLD_WAIT_MS,
                         () -> MiniPlayerBridge.foldHostCard(() -> {
                             if (!isFinishing() && !isDestroyed() && mMorphAnimator == null) {
-                                animateMorph(0f, 250, Motion.EMPHASIZED, this::resetMorph);
+                                // Keep the expansion moving; EMPHASIZED reaches its endpoint too early.
+                                animateMorph(0f, 250, Motion.STANDARD, this::resetMorph);
                             }
                         }));
             });
