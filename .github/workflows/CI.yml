@@ -53,7 +53,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Build with Gradle
-        run: ./gradlew :smarttubetv:assembleStmobileDebug
+        run: ./gradlew clean :smarttubetv:assembleStmobileRelease
 
       - name: VirusTotal Scan
         if: ${{ env.HAS_VT_KEY == 'true' }}
