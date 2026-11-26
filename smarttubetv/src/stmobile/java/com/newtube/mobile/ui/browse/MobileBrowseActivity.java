@@ -476,7 +476,11 @@ public class MobileBrowseActivity extends MobileActivity
         MiniPlayerBridge.setClosing(this::abortMiniClose);
         MiniPlayerBridge.clearPendingCardFold(mMiniCardFold);
         detachMiniTexture();
-        stopMiniSwipe();
+        if (flyTo != null && mMiniSwipe != null) {
+            mMiniSwipe.stopForDismissal();
+        } else {
+            stopMiniSwipe();
+        }
         mMiniPlayerBar.animate().cancel();
         android.view.ViewPropertyAnimator exit = flyTo != null
                 ? (vertical ? mMiniPlayerBar.animate().translationY(flyTo)

@@ -101,6 +101,15 @@ public final class MiniCardSwipe implements View.OnTouchListener {
      * under the host's own fade.
      */
     public void stop() {
+        stop(true);
+    }
+
+    /** Stop swipe helpers without moving the card back before a dismiss animation takes over. */
+    public void stopForDismissal() {
+        stop(false);
+    }
+
+    private void stop(boolean resetExpansionTransform) {
         if (mDragging) {
             mDragging = false;
             mIgnoring = true;
@@ -109,7 +118,9 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         mMagnet.finish();
         cancelSnapBack();
         cancelExpandSnapBack();
-        finishExpansionTransform();
+        if (resetExpansionTransform) {
+            finishExpansionTransform();
+        }
     }
 
     private MiniCardSwipe(View card, Callback callback) {

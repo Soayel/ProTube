@@ -87,7 +87,9 @@
     <application
         android:name="com.newtube.mobile.MobileMainApplication"
         android:theme="@style/Theme.NewTube"
-        tools:replace="android:name,android:theme">
+        android:icon="@mipmap/app_icon"
+        android:roundIcon="@mipmap/app_icon"
+        tools:replace="android:name,android:theme,android:icon,android:roundIcon">
 
         <!-- The TV manifest makes Splash singleInstance, which puts it in a separate task and
              forces Android's non-overridable cross-task slide when it routes into mobile Home.

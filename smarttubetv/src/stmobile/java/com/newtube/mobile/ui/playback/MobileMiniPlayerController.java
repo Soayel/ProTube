@@ -160,7 +160,11 @@ public final class MobileMiniPlayerController {
         MiniPlayerBridge.setClosing(this::abortClose);
         MiniPlayerBridge.clearPendingCardFold(mCardFold);
         detachTexture();
-        mSwipe.stop();
+        if (flyTo != null) {
+            mSwipe.stopForDismissal();
+        } else {
+            mSwipe.stop();
+        }
         mBar.animate().cancel();
         android.view.ViewPropertyAnimator exit;
         if (flyTo != null) {

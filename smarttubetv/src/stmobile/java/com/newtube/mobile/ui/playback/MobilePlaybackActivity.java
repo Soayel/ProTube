@@ -5841,10 +5841,9 @@ public class MobilePlaybackActivity extends MobileActivity
         float settled = Math.min(1f, f);
         applyMorphCorners(settled, Math.min(sx, sy), density);
 
-        // Remove labels/cards early so they do not ghost over Browse, then fade the solid watch
-        // background more slowly. This reads as a black sheet becoming transparent while the live
-        // video remains fully opaque above it.
-        float contentAlpha = Math.max(0f, 1f - f * 5f);
+        // Fade the watch content in step with the video so the description and Up next emerge
+        // throughout the expand morph instead of popping in near its end.
+        float contentAlpha = Math.max(0f, Math.min(1f, 1f - f));
         if (mWatchContent != null) {
             mWatchContent.setAlpha(contentAlpha);
         }
