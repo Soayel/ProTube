@@ -254,6 +254,19 @@
 
     </ScrollView>
 
+    <View
+        android:id="@+id/mobile_mini_expand_backdrop"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:alpha="0"
+        android:background="#0F0F0F"
+        android:importantForAccessibility="no"
+        android:visibility="visible"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <!-- YouTube-style FLOATING mini-player: just the live video (no bar), a rounded card
          hovering over the grid's bottom-right corner above the bottom nav. GONE by default;
          it floats OVER content (like YouTube), so the grid keeps its bottom-nav constraint.

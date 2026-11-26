@@ -344,6 +344,8 @@ public class MobilePlaybackActivity extends MobileActivity
     private boolean mQueueExpanded;
     private final List<Video> mQueueVideos = new ArrayList<>();
     private boolean mExpansionUiHeld;
+    private boolean mAlreadyExpandedAtTop;
+    private boolean mExpandHandoffOverlayCleanupScheduled;
     private boolean mRelatedRenderDeferred;
     private boolean mRelatedSkeletonTimeoutDeferred;
     @Nullable
@@ -459,13 +461,15 @@ public class MobilePlaybackActivity extends MobileActivity
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        mAlreadyExpandedAtTop = MiniPlayerBridge.takeExpandAtTopPending();
+        mExpansionUiHeld = mAlreadyExpandedAtTop;
 
         SystemPipBridge.attach(this);
         sCurrent = new java.lang.ref.WeakReference<>(this);
 
         // A tapped card supplies its own geometry-driven open below. Suppress Android's whole-
         // window animation so it cannot fade/scale the custom thumbnail morph a second time.
-        if (PlayerTransitionBridge.hasPending()) {
+        if (mAlreadyExpandedAtTop || PlayerTransitionBridge.hasPending()) {
             overridePendingTransition(0, 0);
         }
 
@@ -1460,6 +1464,9 @@ public class MobilePlaybackActivity extends MobileActivity
     protected void onResume() {
         super.onResume();
 
+        boolean alreadyExpandedAtTop = mAlreadyExpandedAtTop
+                || MiniPlayerBridge.takeExpandAtTopPending();
+        mAlreadyExpandedAtTop = false;
         PlayerTransitionBridge.LaunchSnapshot launch = PlayerTransitionBridge.take();
 
         mIsResumed = true;
@@ -1543,6 +1550,9 @@ public class MobilePlaybackActivity extends MobileActivity
             // player's first frame is up.
             FrameGate.afterNextFrame(mContainer, HOST_CARD_FOLD_WAIT_MS,
                     () -> MiniPlayerBridge.foldHostCard(null));
+        } else if (alreadyExpandedAtTop && mContainer != null) {
+            prepareExpandedTopHandoffReveal();
+            scheduleExpandHandoffOverlayCleanup();
         } else if (fromMini && mContainer != null) {
             // Plain mini-card expansion: hold page bindings until the exact reverse morph settles.
             mExpansionUiHeld = true;
@@ -1598,6 +1608,84 @@ public class MobilePlaybackActivity extends MobileActivity
             mWatchScroll.getBackground().mutate().setAlpha(0);
         }
         setWindowBackdropAlpha(0f);
+    }
+
+    private void scheduleExpandHandoffOverlayCleanup() {
+        if (mExpandHandoffOverlayCleanupScheduled || mContainer == null) {
+            return;
+        }
+        mExpandHandoffOverlayCleanupScheduled = true;
+        androidx.core.view.OneShotPreDrawListener.add(mContainer, () -> {
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
+            mContainer.postOnAnimation(MiniPlayerBridge::notifyExpandHandoffComplete);
+        });
+    }
+
+    private void prepareExpandedTopHandoffReveal() {
+        mExpansionUiHeld = true;
+        if (mMorphAnimator != null) {
+            mMorphAnimator.cancel();
+            mMorphAnimator = null;
+        }
+        mMorphFraction = 0f;
+        mMorphOverOwnBackdrop = false;
+        mVideoArea.setScaleX(1f);
+        mVideoArea.setScaleY(1f);
+        mVideoArea.setTranslationX(0f);
+        mVideoArea.setTranslationY(0f);
+        mVideoArea.setTranslationZ(0f);
+        restoreVideoAreaOutline();
+        if (mControlsRoot != null) {
+            mControlsRoot.setAlpha(mControlsVisible ? 1f : 0f);
+        }
+        if (mTimeBar != null) {
+            mTimeBar.setAlpha(1f);
+        }
+        if (mCommentsPanel != null) {
+            mCommentsPanel.setMorphAlpha(1f);
+        }
+
+        mContainer.setBackgroundColor(android.graphics.Color.rgb(15, 15, 15));
+        if (mWatchScroll != null && mWatchScroll.getBackground() != null) {
+            mWatchScroll.getBackground().mutate().setAlpha(0);
+        }
+        if (mWatchContent == null || mWatchScroll == null
+                || mWatchScroll.getVisibility() != View.VISIBLE) {
+            releaseExpansionUiHold();
+            mContainer.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+            return;
+        }
+
+        float revealOffset = 24f * getResources().getDisplayMetrics().density;
+        mWatchContent.setAlpha(0f);
+        mWatchContent.setTranslationY(revealOffset);
+        androidx.core.view.OneShotPreDrawListener.add(mWatchScroll, () -> {
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
+            android.graphics.drawable.Drawable background = mWatchScroll.getBackground();
+            if (background != null) {
+                ValueAnimator backgroundReveal = ValueAnimator.ofInt(0, 255);
+                backgroundReveal.setDuration(160);
+                backgroundReveal.setInterpolator(new DecelerateInterpolator());
+                backgroundReveal.addUpdateListener(animator ->
+                        background.mutate().setAlpha((int) animator.getAnimatedValue()));
+                backgroundReveal.start();
+            }
+            mWatchContent.animate().alpha(1f).translationY(0f).setDuration(160)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .withEndAction(() -> {
+                        if (!isFinishing() && !isDestroyed()) {
+                            if (background != null) {
+                                background.mutate().setAlpha(255);
+                            }
+                            mContainer.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+                            releaseExpansionUiHold();
+                        }
+                    }).start();
+        });
     }
 
     @Override
@@ -5854,24 +5942,29 @@ public class MobilePlaybackActivity extends MobileActivity
         applyMorphCorners(settled, Math.min(sx, sy), density);
 
         // Keep details at expanded size; GPU transforms avoid RecyclerView measurement per frame.
-        float contentAlpha = morphContentAlpha(f);
+        float contentAlpha = mDismissDragActive
+                ? minimizeDragDetailsAlpha(f) : morphContentAlpha(f);
         if (mWatchContent != null) {
             mWatchContent.setAlpha(contentAlpha);
             float contentProgress = Math.max(0f, Math.min(1f, f));
             mWatchContent.setTranslationY(mWatchScroll != null
                     ? mWatchScroll.getHeight() * contentProgress : 0f);
         }
-        float backdrop = morphBackdropAlpha(settled, mMorphOverOwnBackdrop); // NEWTUBE(no-host-minimize)
+        float backdrop = mDismissDragActive
+                ? minimizeDragBackdropAlpha(settled, mMorphOverOwnBackdrop)
+                : morphBackdropAlpha(settled, mMorphOverOwnBackdrop);
         if (mWatchScroll != null && mWatchScroll.getBackground() != null) {
             int backdropAlpha = Math.round(255f * backdrop);
             mWatchScroll.getBackground().mutate().setAlpha(backdropAlpha);
         }
         setWindowBackdropAlpha(backdrop);
+        float controlsAlpha = mDismissDragActive
+                ? minimizeDragControlsAlpha(f) : contentAlpha;
         if (mControlsRoot != null && mControlsRoot.getVisibility() == View.VISIBLE) {
-            mControlsRoot.setAlpha(contentAlpha);
+            mControlsRoot.setAlpha(controlsAlpha);
         }
         if (mTimeBar != null) {
-            mTimeBar.setAlpha(contentAlpha); // outside the controls since NEWTUBE(seek bar): fade it too
+            mTimeBar.setAlpha(controlsAlpha); // outside the controls since NEWTUBE(seek bar): fade it too
         }
         if (mCommentsPanel != null) {
             mCommentsPanel.setMorphAlpha(contentAlpha);
@@ -5885,6 +5978,24 @@ public class MobilePlaybackActivity extends MobileActivity
      */
     static float morphBackdropAlpha(float f, boolean overOwnBackdrop) {
         return overOwnBackdrop ? 1f : 1f - f;
+    }
+
+    static float minimizeDragBackdropAlpha(float f, boolean overOwnBackdrop) {
+        if (overOwnBackdrop) {
+            return 1f;
+        }
+        float progress = Math.max(0f, Math.min(1f, f));
+        return (float) Math.pow(Math.max(0f, 1f - progress * 1.45f), 3.5);
+    }
+
+    static float minimizeDragDetailsAlpha(float f) {
+        float progress = Math.max(0f, Math.min(1f, f));
+        return Math.max(0f, 1f - progress / 0.20f);
+    }
+
+    static float minimizeDragControlsAlpha(float f) {
+        float progress = Math.max(0f, Math.min(1f, f));
+        return Math.max(0f, 1f - progress / 0.15f);
     }
 
     /** Fade stationary watch content in smoothly as the video expands. */
@@ -6168,6 +6279,7 @@ public class MobilePlaybackActivity extends MobileActivity
 
     /** Start a minimize morph: the drag's first move, a back gesture or Back itself. */
     private void beginMinimizeMorph() {
+        MiniPlayerBridge.notifyExpandHandoffComplete();
         computeMorphTarget(); // anchor the corner path once per morph
         // NEWTUBE(no-host-minimize): nothing of ours beneath - see the field doc.
         mMorphOverOwnBackdrop = MiniPlayerBridge.getMiniHost() == null;

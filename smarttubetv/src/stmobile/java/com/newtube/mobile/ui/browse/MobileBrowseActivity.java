@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.AnimationDrawable;
 import android.graphics.drawable.Drawable;
@@ -23,6 +24,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+
+import com.google.android.material.card.MaterialCardView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -185,6 +188,12 @@ public class MobileBrowseActivity extends MobileActivity
     private TextureView mMiniTexture;
     private ImageButton mMiniPlayPause;
     private ProgressBar mMiniProgress;
+    private View mMiniExpandBackdrop;
+    @Nullable private android.graphics.Rect mMiniExpansionStartBounds;
+    @Nullable private android.graphics.Rect mMiniExpansionTargetBounds;
+    private boolean mMiniExpandHandoffPending;
+    private boolean mMiniCardTransparent;
+    private final Runnable mClearHostExpandOverlayFallback = this::clearHostExpandOverlay;
     /** 500ms UI ticker while the bar is visible: progress line, play/pause icon, liveness check. */
     private final Runnable mMiniPlayerTick = this::onMiniPlayerTick;
     /**
@@ -316,6 +325,7 @@ public class MobileBrowseActivity extends MobileActivity
 
         mMiniPlayerBar = findViewById(R.id.mobile_mini_player);
         mMiniPlayerFrame = findViewById(R.id.mobile_mini_player_frame);
+        mMiniExpandBackdrop = findViewById(R.id.mobile_mini_expand_backdrop);
         mMiniFreeze = findViewById(R.id.mobile_mini_freeze);
         mMiniPlayPause = findViewById(R.id.mobile_mini_play_pause);
         mMiniProgress = findViewById(R.id.mobile_mini_progress);
@@ -420,16 +430,80 @@ public class MobileBrowseActivity extends MobileActivity
 
                     @Override
                     public void onExpansionProgress(float progress) {
-                        setMiniButtonsAlpha(1f - progress);
+                        setMiniButtonsAlpha(1f - Math.min(1f, progress / 0.15f));
+                        updateMiniExpansionBackdrop(progress);
+                    }
+
+                    @Override
+                    public void onExpansionStarted(android.graphics.Rect startBounds,
+                            android.graphics.Rect targetBounds) {
+                        mMiniExpansionStartBounds = new android.graphics.Rect(startBounds);
+                        mMiniExpansionTargetBounds = new android.graphics.Rect(targetBounds);
+                    }
+
+                    @Override
+                    public boolean expandsOnHost() {
+                        return true;
                     }
 
                     @Override
                     public void onSwipedUp(android.graphics.Rect currentBounds, float yVelocity) {
                         if (!mMiniClosing && MiniPlayerBridge.isActive()) {
-                            expandMiniPlayer(currentBounds, yVelocity);
+                            MiniPlayerBridge.setMiniBounds(currentBounds, yVelocity);
+                            mMiniExpandHandoffPending = true;
+                            MiniPlayerBridge.expandAtTop(MobileBrowseActivity.this);
                         }
                     }
                 }, mMiniPlayerFrame, mMiniPlayerBar);
+    }
+
+    private void updateMiniExpansionBackdrop(float progress) {
+        if (mMiniExpandBackdrop == null) {
+            return;
+        }
+        if (progress <= 0f) {
+            hideMiniExpansionBackdrop();
+            setMiniCardTransparent(false);
+            return;
+        }
+        setMiniCardTransparent(true);
+        float backdropAlpha = progress <= 0.70f
+                ? 0f
+                : Math.max(0f, Math.min(1f, (progress - 0.70f) / 0.30f));
+        mMiniExpandBackdrop.setAlpha(backdropAlpha);
+    }
+
+    private void resetMiniExpansionBackdrop() {
+        hideMiniExpansionBackdrop();
+        setMiniCardTransparent(false);
+        mMiniExpansionStartBounds = null;
+        mMiniExpansionTargetBounds = null;
+    }
+
+    private void clearHostExpandOverlay() {
+        mMiniExpandHandoffPending = false;
+        resetMiniExpansionBackdrop();
+        MiniPlayerBridge.clearPendingCardFold(mMiniCardFold);
+        foldMiniCard();
+    }
+
+    private void hideMiniExpansionBackdrop() {
+        if (mMiniExpandBackdrop != null) {
+            mMiniExpandBackdrop.setAlpha(0f);
+            mMiniExpandBackdrop.setScaleY(1f);
+            mMiniExpandBackdrop.setTranslationY(0f);
+        }
+    }
+
+    private void setMiniCardTransparent(boolean transparent) {
+        if (mMiniCardTransparent == transparent) {
+            return;
+        }
+        mMiniCardTransparent = transparent;
+        if (mMiniPlayerBar instanceof MaterialCardView) {
+            ((MaterialCardView) mMiniPlayerBar).setCardBackgroundColor(
+                    transparent ? Color.TRANSPARENT : android.graphics.Color.BLACK);
+        }
     }
 
     private void expandMiniPlayer() {
@@ -733,6 +807,7 @@ public class MobileBrowseActivity extends MobileActivity
         mMiniPlayerBar.setVisibility(View.GONE);
         unwatchMiniScreenOn();
         setMiniKeepScreenOn(false); // no card, no video on this screen
+        setMiniCardTransparent(false);
         mMiniPlayerBar.setAlpha(1f);
         mMiniPlayerBar.setScaleX(1f);
         mMiniPlayerBar.setScaleY(1f);
@@ -1885,6 +1960,8 @@ public class MobileBrowseActivity extends MobileActivity
     protected void onResume() {
         super.onResume();
 
+        getWindow().getDecorView().removeCallbacks(mClearHostExpandOverlayFallback);
+        MiniPlayerBridge.registerHostExpandOverlayReset(this::clearHostExpandOverlay);
         if (mPresenter != null) {
             mPresenter.onViewResumed();
         }
@@ -1971,6 +2048,8 @@ public class MobileBrowseActivity extends MobileActivity
     protected void onPause() {
         super.onPause();
 
+        getWindow().getDecorView().removeCallbacks(mClearHostExpandOverlayFallback);
+        getWindow().getDecorView().postDelayed(mClearHostExpandOverlayFallback, 300);
         if (mPresenter != null) {
             mPresenter.onViewPaused();
         }
@@ -1998,6 +2077,14 @@ public class MobileBrowseActivity extends MobileActivity
     @Override
     protected void onStop() {
         super.onStop();
+        getWindow().getDecorView().removeCallbacks(mClearHostExpandOverlayFallback);
+        if (mMiniExpandHandoffPending
+                && com.newtube.mobile.ui.playback.MobilePlaybackActivity.isCoveringScreens()) {
+            mMiniExpandHandoffPending = false;
+            resetMiniExpansionBackdrop();
+            MiniPlayerBridge.clearPendingCardFold(mMiniCardFold);
+            foldMiniCard();
+        }
         // Covered: a card still waiting for the player to fold it can go now.
         if (mMiniTexture == null) {
             hideMiniPlayer();
@@ -2017,6 +2104,8 @@ public class MobileBrowseActivity extends MobileActivity
 
     @Override
     protected void onDestroy() {
+        getWindow().getDecorView().removeCallbacks(mClearHostExpandOverlayFallback);
+        MiniPlayerBridge.registerHostExpandOverlayReset(null);
         unwatchMiniScreenOn(); // the shared player outlives this Activity
         mNavHandler.removeCallbacks(mNavRebuild);
         mNavHandler.removeCallbacks(mRunwayCheck);

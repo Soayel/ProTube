@@ -1,6 +1,7 @@
 package com.newtube.mobile.ui.playback;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 
@@ -49,5 +50,31 @@ public class MinimizeBackdropTest {
     public void watchContentAlphaClampsSpringOvershoot() {
         assertEquals(0f, MobilePlaybackActivity.morphContentAlpha(1.1f), EPS);
         assertEquals(1f, MobilePlaybackActivity.morphContentAlpha(-0.1f), EPS);
+    }
+
+    @Test
+    public void minimizeDragFadesDetailsWithinFirstFifth() {
+        assertEquals(1f, MobilePlaybackActivity.minimizeDragDetailsAlpha(0f), EPS);
+        assertEquals(0.5f, MobilePlaybackActivity.minimizeDragDetailsAlpha(0.1f), EPS);
+        assertEquals(0f, MobilePlaybackActivity.minimizeDragDetailsAlpha(0.2f), EPS);
+    }
+
+    @Test
+    public void minimizeDragFadesControlsWithinFirstFifteenth() {
+        assertEquals(1f, MobilePlaybackActivity.minimizeDragControlsAlpha(0f), EPS);
+        assertEquals(0.5f, MobilePlaybackActivity.minimizeDragControlsAlpha(0.075f), EPS);
+        assertEquals(0f, MobilePlaybackActivity.minimizeDragControlsAlpha(0.15f), EPS);
+    }
+
+    @Test
+    public void minimizeDragRapidlyUncoversHomeButKeepsNoHostBackdropOpaque() {
+        assertEquals(1f, MobilePlaybackActivity.minimizeDragBackdropAlpha(0f, false), EPS);
+        float quarterProgressAlpha =
+                MobilePlaybackActivity.minimizeDragBackdropAlpha(0.25f, false);
+        assertEquals((float) Math.pow(1f - 0.25f * 1.45f, 3.5),
+                quarterProgressAlpha, EPS);
+        assertTrue(quarterProgressAlpha < 0.25f);
+        assertEquals(0f, MobilePlaybackActivity.minimizeDragBackdropAlpha(0.7f, false), EPS);
+        assertEquals(1f, MobilePlaybackActivity.minimizeDragBackdropAlpha(0.7f, true), EPS);
     }
 }
