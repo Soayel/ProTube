@@ -78,6 +78,7 @@ public final class MiniPlayerBridge {
     private static Bitmap sHandoffStill;
     private static Bitmap sMiniEntryStill;
     private static Rect sMiniBounds;
+    private static float sMiniExpansionVelocityY;
 
     private MiniPlayerBridge() {
     }
@@ -235,7 +236,13 @@ public final class MiniPlayerBridge {
 
     /** Exact on-screen mini rectangle, used to reverse the morph without a geometry jump. */
     public static void setMiniBounds(@Nullable Rect bounds) {
+        setMiniBounds(bounds, 0f);
+    }
+
+    /** Bounds and release velocity for a swipe that is continuing into the fullscreen morph. */
+    public static void setMiniBounds(@Nullable Rect bounds, float yVelocity) {
         sMiniBounds = bounds != null ? new Rect(bounds) : null;
+        sMiniExpansionVelocityY = bounds != null ? yVelocity : 0f;
     }
 
     @Nullable
@@ -243,6 +250,12 @@ public final class MiniPlayerBridge {
         Rect bounds = sMiniBounds;
         sMiniBounds = null;
         return bounds;
+    }
+
+    static float takeMiniExpansionVelocityY() {
+        float velocity = sMiniExpansionVelocityY;
+        sMiniExpansionVelocityY = 0f;
+        return velocity;
     }
 
     @Nullable

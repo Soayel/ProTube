@@ -114,21 +114,21 @@ public final class MobileMiniPlayerController {
             }
 
             @Override
-            public void onSwipedUp(Rect currentBounds) {
+            public void onSwipedUp(Rect currentBounds, float yVelocity) {
                 if (!mClosing && MiniPlayerBridge.isActive()) {
-                    expand(currentBounds);
+                    expand(currentBounds, yVelocity);
                 }
             }
         }, mFrame, mBar);
     }
 
     private void expand() {
-        expand(null);
+        expand(null, 0f);
     }
 
-    private void expand(@Nullable Rect currentBounds) {
+    private void expand(@Nullable Rect currentBounds, float yVelocity) {
         if (currentBounds != null) {
-            MiniPlayerBridge.setMiniBounds(currentBounds);
+            MiniPlayerBridge.setMiniBounds(currentBounds, yVelocity);
         } else {
             publishBounds();
         }

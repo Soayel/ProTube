@@ -343,6 +343,15 @@ public class MobilePlaybackActivity extends MobileActivity
     /** Collapsed by default, like YouTube's queue. Survives video changes within a session. */
     private boolean mQueueExpanded;
     private final List<Video> mQueueVideos = new ArrayList<>();
+    private boolean mExpansionUiHeld;
+    private boolean mRelatedRenderDeferred;
+    private boolean mRelatedSkeletonTimeoutDeferred;
+    @Nullable
+    private Boolean mRelatedSkeletonVisibilityDeferred;
+    @Nullable
+    private Video mWatchVideoDeferred;
+    @Nullable
+    private MediaItemMetadata mWatchMetadataDeferred;
 
     // Like/Dislike/Subscribe visual state, keyed by R.id.action_*.
     private final SparseIntArray mButtonStates = new SparseIntArray();
@@ -1506,6 +1515,7 @@ public class MobilePlaybackActivity extends MobileActivity
         // captured its last frame for us; it covers the 1-2 frames until the texture paints.
         boolean fromMini = MiniPlayerBridge.isActive();
         Rect miniBounds = fromMini ? MiniPlayerBridge.takeMiniBounds() : null;
+        float miniExpansionVelocityY = fromMini ? MiniPlayerBridge.takeMiniExpansionVelocityY() : 0f;
         if (fromMini) {
             Bitmap handoff = MiniPlayerBridge.takeHandoffStill();
             if (handoff != null) {
@@ -1534,7 +1544,8 @@ public class MobilePlaybackActivity extends MobileActivity
             FrameGate.afterNextFrame(mContainer, HOST_CARD_FOLD_WAIT_MS,
                     () -> MiniPlayerBridge.foldHostCard(null));
         } else if (fromMini && mContainer != null) {
-            // Plain mini-card expansion: exact reverse of minimize, from the card rectangle.
+            // Plain mini-card expansion: hold page bindings until the exact reverse morph settles.
+            mExpansionUiHeld = true;
             overridePendingTransition(0, 0);
             mContainer.setVisibility(View.INVISIBLE);
             mMorphStartPending = true;
@@ -1553,8 +1564,8 @@ public class MobilePlaybackActivity extends MobileActivity
                 FrameGate.afterNextFrame(mContainer, HOST_CARD_FOLD_WAIT_MS,
                         () -> MiniPlayerBridge.foldHostCard(() -> {
                             if (!isFinishing() && !isDestroyed() && mMorphAnimator == null) {
-                                // Keep the expansion moving; EMPHASIZED reaches its endpoint too early.
-                                animateMorph(0f, 250, Motion.STANDARD, this::resetMorph);
+                                animateMorph(0f, miniExpansionDurationMs(miniExpansionVelocityY),
+                                        Motion.STANDARD, this::resetMorph);
                             }
                         }));
             });
@@ -5842,10 +5853,13 @@ public class MobilePlaybackActivity extends MobileActivity
         float settled = Math.min(1f, f);
         applyMorphCorners(settled, Math.min(sx, sy), density);
 
-        // Keep description and Up next at their fullscreen positions; only fade them with the morph.
+        // Keep details at expanded size; GPU transforms avoid RecyclerView measurement per frame.
         float contentAlpha = morphContentAlpha(f);
         if (mWatchContent != null) {
             mWatchContent.setAlpha(contentAlpha);
+            float contentProgress = Math.max(0f, Math.min(1f, f));
+            mWatchContent.setTranslationY(mWatchScroll != null
+                    ? mWatchScroll.getHeight() * contentProgress : 0f);
         }
         float backdrop = morphBackdropAlpha(settled, mMorphOverOwnBackdrop); // NEWTUBE(no-host-minimize)
         if (mWatchScroll != null && mWatchScroll.getBackground() != null) {
@@ -5877,6 +5891,18 @@ public class MobilePlaybackActivity extends MobileActivity
     static float morphContentAlpha(float f) {
         float visible = 1f - Math.max(0f, Math.min(1f, f));
         return visible * (2f - visible);
+    }
+
+    private long miniExpansionDurationMs(float yVelocity) {
+        float speed = Math.max(0f, -yVelocity);
+        if (speed < 600f || mVideoArea == null) {
+            return 250L;
+        }
+        float distance = Math.max(Math.abs(mMorphTx), Math.abs(mMorphTy));
+        distance = Math.max(distance, Math.abs((mMorphScaleX - 1f) * mVideoArea.getWidth()));
+        distance = Math.max(distance, Math.abs((mMorphScaleY - 1f) * mVideoArea.getHeight()));
+        long duration = Math.round(1000f * distance / speed);
+        return Math.max(90L, Math.min(250L, duration));
     }
 
     /**
@@ -5946,6 +5972,7 @@ public class MobilePlaybackActivity extends MobileActivity
         restoreVideoAreaOutline();
         if (mWatchContent != null) {
             mWatchContent.setAlpha(1f);
+            mWatchContent.setTranslationY(0f);
         }
         if (mWatchScroll != null && mWatchScroll.getBackground() != null) {
             mWatchScroll.getBackground().mutate().setAlpha(255);
@@ -5959,6 +5986,42 @@ public class MobilePlaybackActivity extends MobileActivity
         }
         if (mCommentsPanel != null) {
             mCommentsPanel.setMorphAlpha(1f);
+        }
+        releaseExpansionUiHold();
+    }
+
+    private void releaseExpansionUiHold() {
+        if (!mExpansionUiHeld) {
+            return;
+        }
+        mExpansionUiHeld = false;
+        Video video = mWatchVideoDeferred;
+        mWatchVideoDeferred = null;
+        MediaItemMetadata metadata = mWatchMetadataDeferred;
+        mWatchMetadataDeferred = null;
+        boolean renderRelated = mRelatedRenderDeferred;
+        mRelatedRenderDeferred = false;
+        boolean skeletonTimeout = mRelatedSkeletonTimeoutDeferred;
+        mRelatedSkeletonTimeoutDeferred = false;
+        Boolean skeletonVisibility = mRelatedSkeletonVisibilityDeferred;
+        mRelatedSkeletonVisibilityDeferred = null;
+        if (video != null) {
+            bindWatchVideo(video);
+        }
+        if (metadata != null) {
+            bindWatchMetadata(metadata);
+        }
+        if (renderRelated) {
+            renderRelatedList();
+        }
+        if (skeletonTimeout) {
+            onRelatedSkeletonTimeout();
+        } else if (skeletonVisibility != null) {
+            if (skeletonVisibility) {
+                showRelatedSkeleton();
+            } else {
+                hideRelatedSkeleton();
+            }
         }
     }
 
@@ -6622,6 +6685,10 @@ public class MobilePlaybackActivity extends MobileActivity
      * look like a broken page (NEWTUBE(watch-offline)).
      */
     private void onRelatedSkeletonTimeout() {
+        if (mExpansionUiHeld) {
+            mRelatedSkeletonTimeoutDeferred = true;
+            return;
+        }
         hideRelatedSkeleton();
         if (!mRelatedVideos.isEmpty()) {
             return;
@@ -6657,6 +6724,10 @@ public class MobilePlaybackActivity extends MobileActivity
         if (mRelatedSkeleton == null) {
             return;
         }
+        if (mExpansionUiHeld) {
+            mRelatedSkeletonVisibilityDeferred = true;
+            return;
+        }
         mRelatedSkeleton.setVisibility(View.VISIBLE); // it shimmers itself (ShimmerLinearLayout)
         Utils.removeCallbacks(mHideSkeletonTimeout);
         Utils.postDelayed(mHideSkeletonTimeout, SKELETON_TIMEOUT_MS);
@@ -6664,6 +6735,10 @@ public class MobilePlaybackActivity extends MobileActivity
 
     private void hideRelatedSkeleton() {
         Utils.removeCallbacks(mHideSkeletonTimeout);
+        if (mExpansionUiHeld && !isFinishing() && !isDestroyed()) {
+            mRelatedSkeletonVisibilityDeferred = false;
+            return;
+        }
         if (mRelatedSkeleton != null) {
             mRelatedSkeleton.setVisibility(View.GONE);
         }
@@ -7773,6 +7848,10 @@ public class MobilePlaybackActivity extends MobileActivity
         if (item == null || mWatchTitle == null) {
             return;
         }
+        if (mExpansionUiHeld && Helpers.equals(item.videoId, mWatchVideoId)) {
+            mWatchVideoDeferred = item;
+            return;
+        }
 
         mWatchVideo = item;
         boolean isNewVideo = !Helpers.equals(item.videoId, mWatchVideoId);
@@ -7916,6 +7995,10 @@ public class MobilePlaybackActivity extends MobileActivity
 
     private void bindWatchMetadata(MediaItemMetadata metadata) {
         if (metadata == null) {
+            return;
+        }
+        if (mExpansionUiHeld) {
+            mWatchMetadataDeferred = metadata;
             return;
         }
 
@@ -8438,6 +8521,11 @@ public class MobilePlaybackActivity extends MobileActivity
 
     private void renderRelatedList() {
         if (isFinishing() || isDestroyed()) {
+            return;
+        }
+        if (mExpansionUiHeld) {
+            // Keep adapter diffs and row binding off the fullscreen expansion frames.
+            mRelatedRenderDeferred = true;
             return;
         }
         Video current = getVideo();

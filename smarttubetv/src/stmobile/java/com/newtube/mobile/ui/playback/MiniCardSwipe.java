@@ -47,7 +47,7 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         }
 
         /** Committed upward swipe: expand from the card's current on-screen rectangle. */
-        void onSwipedUp(Rect currentBounds);
+        void onSwipedUp(Rect currentBounds, float yVelocity);
     }
 
     private static final float FLING_VELOCITY_DP = 450f;
@@ -130,14 +130,9 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         mFlingVelocity = FLING_VELOCITY_DP * card.getResources().getDisplayMetrics().density;
         mMagnet = new MagneticDrag(card, position -> {
             if (mExpanding && mExpandStartBounds != null && mExpandTargetBounds != null) {
-                View root = mCard.getRootView();
-                float maxTravel = root != null ? root.getHeight() * 0.45f : 0f;
-                float distanceToTarget = mExpandStartBounds.top - mExpandTargetBounds.top;
-                float travel = maxTravel > 0f
-                        ? Math.max(1f, Math.min(distanceToTarget, maxTravel))
-                        : Math.max(1f, distanceToTarget);
-                setExpandProgress(Math.min(1f, Math.max(0f, -position / travel)));
-            } else if (mVertical) {
+                return;
+            }
+            if (mVertical) {
                 mCard.setTranslationY(position);
                 mCard.setAlpha(alphaFor(position));
             } else {
@@ -201,6 +196,9 @@ public final class MiniCardSwipe implements View.OnTouchListener {
                     beginExpansion();
                 }
                 mMagnet.move(mVertical ? dy : dx);
+                if (mExpanding) {
+                    updateExpansionFromFingerTravel(dy);
+                }
                 return true;
             }
             case MotionEvent.ACTION_UP: {
@@ -223,6 +221,9 @@ public final class MiniCardSwipe implements View.OnTouchListener {
                 float travel = mVertical
                         ? event.getRawY() - mDownRawY : event.getRawX() - mDownRawX;
                 mMagnet.move(travel); // where the finger lifted, which a last MOVE may not have said
+                if (mExpanding) {
+                    updateExpansionFromFingerTravel(travel);
+                }
                 mMagnet.finish();
                 release(mMagnet.isDetached(), travel, velocity);
                 return true;
@@ -269,7 +270,7 @@ public final class MiniCardSwipe implements View.OnTouchListener {
             Haptics.threshold(mCard, true); // flung before it let go: the click it skipped
         }
         if (mVertical && travel < 0f) {
-            mCallback.onSwipedUp(currentBoundsOnScreen());
+            mCallback.onSwipedUp(currentBoundsOnScreen(), velocity);
             return;
         }
         // Off that side of the screen: at least the card's width plus its distance to the edge.
@@ -288,7 +289,7 @@ public final class MiniCardSwipe implements View.OnTouchListener {
     private void springBack(float startVelocity) {
         mCard.animate().cancel();
         if (mExpanding) {
-            springBackExpansion();
+            springBackExpansion(startVelocity);
             return;
         }
         if (mSnapBack == null || mSnapBackVertical != mVertical) {
@@ -320,6 +321,22 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         mExpandTargetBounds = target;
         mExpanding = true;
         cancelExpandSnapBack();
+    }
+
+    private void updateExpansionFromFingerTravel(float travel) {
+        if (mExpandStartBounds == null || mExpandTargetBounds == null) {
+            return;
+        }
+        setExpandProgress(Math.min(1f, Math.max(0f, -travel / expansionTravelPx())));
+    }
+
+    private float expansionTravelPx() {
+        View root = mCard.getRootView();
+        float maxTravel = root != null ? root.getHeight() * 0.45f : 0f;
+        float distanceToTarget = mExpandStartBounds.top - mExpandTargetBounds.top;
+        return maxTravel > 0f
+                ? Math.max(1f, Math.min(distanceToTarget, maxTravel))
+                : Math.max(1f, distanceToTarget);
     }
 
     private void setExpandProgress(float progress) {
@@ -356,7 +373,7 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         mCallback.onExpansionProgress(progress);
     }
 
-    private void springBackExpansion() {
+    private void springBackExpansion(float startVelocity) {
         cancelExpandSnapBack();
         if (mExpandProgress <= 0f) {
             finishExpansionTransform();
@@ -364,13 +381,25 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         }
         ValueAnimator animator = ValueAnimator.ofFloat(mExpandProgress, 0f);
         mExpandSnapBack = animator;
-        animator.setDuration(EXPAND_SNAP_BACK_MS);
+        float speedTowardMini = Math.max(0f, startVelocity);
+        float distancePx = mExpandProgress * expansionTravelPx();
+        long durationMs = speedTowardMini > 300f
+                ? Math.round(1000f * distancePx / speedTowardMini)
+                : Math.round(60f + 120f * mExpandProgress);
+        animator.setDuration(Math.max(90L, Math.min(EXPAND_SNAP_BACK_MS, durationMs)));
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(value -> setExpandProgress((float) value.getAnimatedValue()));
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean mCancelled;
+
+            @Override
+            public void onAnimationCancel(android.animation.Animator animation) {
+                mCancelled = true;
+            }
+
             @Override
             public void onAnimationEnd(android.animation.Animator animation) {
-                if (mExpandSnapBack == animator) {
+                if (!mCancelled && mExpandSnapBack == animator) {
                     mExpandSnapBack = null;
                     finishExpansionTransform();
                 }
