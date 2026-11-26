@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.AnimationDrawable;
 import android.graphics.drawable.Drawable;
@@ -23,6 +24,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+
+import com.google.android.material.card.MaterialCardView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -189,6 +192,7 @@ public class MobileBrowseActivity extends MobileActivity
     @Nullable private android.graphics.Rect mMiniExpansionStartBounds;
     @Nullable private android.graphics.Rect mMiniExpansionTargetBounds;
     private boolean mMiniExpandHandoffPending;
+    private boolean mMiniCardTransparent;
     /** 500ms UI ticker while the bar is visible: progress line, play/pause icon, liveness check. */
     private final Runnable mMiniPlayerTick = this::onMiniPlayerTick;
     /**
@@ -453,34 +457,24 @@ public class MobileBrowseActivity extends MobileActivity
     }
 
     private void updateMiniExpansionBackdrop(float progress) {
-        if (mMiniExpandBackdrop == null || mMiniExpansionStartBounds == null
-                || mMiniExpansionTargetBounds == null) {
+        if (mMiniExpandBackdrop == null) {
             return;
         }
         if (progress <= 0f) {
             hideMiniExpansionBackdrop();
+            setMiniCardTransparent(false);
             return;
         }
-        View root = findViewById(R.id.mobile_browse_root);
-        if (root == null || root.getHeight() <= 0) {
-            return;
-        }
-        int[] rootLocation = new int[2];
-        root.getLocationOnScreen(rootLocation);
-        float screenTop = mMiniExpansionStartBounds.bottom
-                + (mMiniExpansionTargetBounds.bottom - mMiniExpansionStartBounds.bottom) * progress;
-        float top = screenTop - rootLocation[1];
-        mMiniExpandBackdrop.setPivotY(0f);
-        mMiniExpandBackdrop.setTranslationY(top);
-        mMiniExpandBackdrop.setScaleY(Math.max(0f,
-                Math.min(1f, (root.getHeight() - top) / root.getHeight())));
-        mMiniExpandBackdrop.setElevation(
-                12f * getResources().getDisplayMetrics().density);
-        mMiniExpandBackdrop.setAlpha(1f);
+        setMiniCardTransparent(true);
+        float backdropAlpha = progress <= 0.70f
+                ? 0f
+                : Math.max(0f, Math.min(1f, (progress - 0.70f) / 0.30f));
+        mMiniExpandBackdrop.setAlpha(backdropAlpha);
     }
 
     private void resetMiniExpansionBackdrop() {
         hideMiniExpansionBackdrop();
+        setMiniCardTransparent(false);
         mMiniExpansionStartBounds = null;
         mMiniExpansionTargetBounds = null;
     }
@@ -490,8 +484,17 @@ public class MobileBrowseActivity extends MobileActivity
             mMiniExpandBackdrop.setAlpha(0f);
             mMiniExpandBackdrop.setScaleY(1f);
             mMiniExpandBackdrop.setTranslationY(0f);
-            mMiniExpandBackdrop.setElevation(
-                    getResources().getDisplayMetrics().density);
+        }
+    }
+
+    private void setMiniCardTransparent(boolean transparent) {
+        if (mMiniCardTransparent == transparent) {
+            return;
+        }
+        mMiniCardTransparent = transparent;
+        if (mMiniPlayerBar instanceof MaterialCardView) {
+            ((MaterialCardView) mMiniPlayerBar).setCardBackgroundColor(
+                    transparent ? Color.TRANSPARENT : android.graphics.Color.BLACK);
         }
     }
 
