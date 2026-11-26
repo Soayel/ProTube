@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src=".github/assets/IMG-20261126-WA0000(1).jpg" width="180" alt="ProTube logo">
+<img src="smarttubetv/src/stmobile/res/mipmap-xxxhdpi/app_icon.png">
 
 # ProTube
 
