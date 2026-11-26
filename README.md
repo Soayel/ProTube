@@ -1,3 +1,3 @@
 <div align="center">
 
-<img src=".github/assets/icon.png" width="112" height="112" alt="NewTube icon">
+<img src=".github/assets/Minimalist White Propeller Logo.png">
