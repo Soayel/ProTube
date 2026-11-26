@@ -345,6 +345,7 @@ public class MobilePlaybackActivity extends MobileActivity
     private final List<Video> mQueueVideos = new ArrayList<>();
     private boolean mExpansionUiHeld;
     private boolean mAlreadyExpandedAtTop;
+    private boolean mExpandHandoffOverlayCleanupScheduled;
     private boolean mRelatedRenderDeferred;
     private boolean mRelatedSkeletonTimeoutDeferred;
     @Nullable
@@ -1551,6 +1552,7 @@ public class MobilePlaybackActivity extends MobileActivity
                     () -> MiniPlayerBridge.foldHostCard(null));
         } else if (alreadyExpandedAtTop && mContainer != null) {
             prepareExpandedTopHandoffReveal();
+            scheduleExpandHandoffOverlayCleanup();
         } else if (fromMini && mContainer != null) {
             // Plain mini-card expansion: hold page bindings until the exact reverse morph settles.
             mExpansionUiHeld = true;
@@ -1606,6 +1608,19 @@ public class MobilePlaybackActivity extends MobileActivity
             mWatchScroll.getBackground().mutate().setAlpha(0);
         }
         setWindowBackdropAlpha(0f);
+    }
+
+    private void scheduleExpandHandoffOverlayCleanup() {
+        if (mExpandHandoffOverlayCleanupScheduled || mContainer == null) {
+            return;
+        }
+        mExpandHandoffOverlayCleanupScheduled = true;
+        androidx.core.view.OneShotPreDrawListener.add(mContainer, () -> {
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
+            mContainer.postOnAnimation(MiniPlayerBridge::notifyExpandHandoffComplete);
+        });
     }
 
     private void prepareExpandedTopHandoffReveal() {
@@ -6241,6 +6256,7 @@ public class MobilePlaybackActivity extends MobileActivity
 
     /** Start a minimize morph: the drag's first move, a back gesture or Back itself. */
     private void beginMinimizeMorph() {
+        MiniPlayerBridge.notifyExpandHandoffComplete();
         computeMorphTarget(); // anchor the corner path once per morph
         // NEWTUBE(no-host-minimize): nothing of ours beneath - see the field doc.
         mMorphOverOwnBackdrop = MiniPlayerBridge.getMiniHost() == null;

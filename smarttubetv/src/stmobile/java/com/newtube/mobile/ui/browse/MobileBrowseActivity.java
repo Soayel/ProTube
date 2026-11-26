@@ -193,6 +193,7 @@ public class MobileBrowseActivity extends MobileActivity
     @Nullable private android.graphics.Rect mMiniExpansionTargetBounds;
     private boolean mMiniExpandHandoffPending;
     private boolean mMiniCardTransparent;
+    private final Runnable mClearHostExpandOverlayFallback = this::clearHostExpandOverlay;
     /** 500ms UI ticker while the bar is visible: progress line, play/pause icon, liveness check. */
     private final Runnable mMiniPlayerTick = this::onMiniPlayerTick;
     /**
@@ -477,6 +478,13 @@ public class MobileBrowseActivity extends MobileActivity
         setMiniCardTransparent(false);
         mMiniExpansionStartBounds = null;
         mMiniExpansionTargetBounds = null;
+    }
+
+    private void clearHostExpandOverlay() {
+        mMiniExpandHandoffPending = false;
+        resetMiniExpansionBackdrop();
+        MiniPlayerBridge.clearPendingCardFold(mMiniCardFold);
+        foldMiniCard();
     }
 
     private void hideMiniExpansionBackdrop() {
@@ -799,6 +807,7 @@ public class MobileBrowseActivity extends MobileActivity
         mMiniPlayerBar.setVisibility(View.GONE);
         unwatchMiniScreenOn();
         setMiniKeepScreenOn(false); // no card, no video on this screen
+        setMiniCardTransparent(false);
         mMiniPlayerBar.setAlpha(1f);
         mMiniPlayerBar.setScaleX(1f);
         mMiniPlayerBar.setScaleY(1f);
@@ -1951,6 +1960,8 @@ public class MobileBrowseActivity extends MobileActivity
     protected void onResume() {
         super.onResume();
 
+        getWindow().getDecorView().removeCallbacks(mClearHostExpandOverlayFallback);
+        MiniPlayerBridge.registerHostExpandOverlayReset(this::clearHostExpandOverlay);
         if (mPresenter != null) {
             mPresenter.onViewResumed();
         }
@@ -2037,6 +2048,8 @@ public class MobileBrowseActivity extends MobileActivity
     protected void onPause() {
         super.onPause();
 
+        getWindow().getDecorView().removeCallbacks(mClearHostExpandOverlayFallback);
+        getWindow().getDecorView().postDelayed(mClearHostExpandOverlayFallback, 300);
         if (mPresenter != null) {
             mPresenter.onViewPaused();
         }
@@ -2064,6 +2077,7 @@ public class MobileBrowseActivity extends MobileActivity
     @Override
     protected void onStop() {
         super.onStop();
+        getWindow().getDecorView().removeCallbacks(mClearHostExpandOverlayFallback);
         if (mMiniExpandHandoffPending
                 && com.newtube.mobile.ui.playback.MobilePlaybackActivity.isCoveringScreens()) {
             mMiniExpandHandoffPending = false;
@@ -2090,6 +2104,8 @@ public class MobileBrowseActivity extends MobileActivity
 
     @Override
     protected void onDestroy() {
+        getWindow().getDecorView().removeCallbacks(mClearHostExpandOverlayFallback);
+        MiniPlayerBridge.registerHostExpandOverlayReset(null);
         unwatchMiniScreenOn(); // the shared player outlives this Activity
         mNavHandler.removeCallbacks(mNavRebuild);
         mNavHandler.removeCallbacks(mRunwayCheck);

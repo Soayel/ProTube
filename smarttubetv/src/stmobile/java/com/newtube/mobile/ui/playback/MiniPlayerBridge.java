@@ -82,6 +82,8 @@ public final class MiniPlayerBridge {
     private static Rect sMiniBounds;
     private static float sMiniExpansionVelocityY;
     private static boolean sExpandAtTopPending;
+    @Nullable
+    private static Runnable sHostExpandOverlayReset;
 
     private MiniPlayerBridge() {
     }
@@ -98,6 +100,18 @@ public final class MiniPlayerBridge {
     public static void unregisterMiniHost(MiniHost host) {
         if (sMiniHost.get() == host) {
             sMiniHost = new WeakReference<>(null);
+        }
+    }
+
+    /** Register the host callback that clears the swipe-up expansion overlay. */
+    public static void registerHostExpandOverlayReset(@Nullable Runnable reset) {
+        sHostExpandOverlayReset = reset;
+    }
+
+    /** Clear the host overlay once the expanded playback view has safely drawn. */
+    public static void notifyExpandHandoffComplete() {
+        if (sHostExpandOverlayReset != null) {
+            sHostExpandOverlayReset.run();
         }
     }
 
