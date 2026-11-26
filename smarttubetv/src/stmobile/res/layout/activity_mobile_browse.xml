@@ -262,7 +262,6 @@
         android:background="#0F0F0F"
         android:elevation="1dp"
         android:importantForAccessibility="no"
-        android:pivotY="0dp"
         android:visibility="visible"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
