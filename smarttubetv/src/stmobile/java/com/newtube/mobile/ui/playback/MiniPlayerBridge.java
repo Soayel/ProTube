@@ -1,9 +1,11 @@
 package com.newtube.mobile.ui.playback;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
+import android.os.Build;
 import android.os.SystemClock;
 import android.view.View;
 
@@ -79,6 +81,7 @@ public final class MiniPlayerBridge {
     private static Bitmap sMiniEntryStill;
     private static Rect sMiniBounds;
     private static float sMiniExpansionVelocityY;
+    private static boolean sExpandAtTopPending;
 
     private MiniPlayerBridge() {
     }
@@ -264,6 +267,13 @@ public final class MiniPlayerBridge {
         return activity != null ? activity.getVideoAreaBoundsOnScreen() : null;
     }
 
+    /** Consume the one-shot signal for a host-settled swipe-up expansion. */
+    static boolean takeExpandAtTopPending() {
+        boolean pending = sExpandAtTopPending;
+        sExpandAtTopPending = false;
+        return pending;
+    }
+
     /** Consume the captured card frame (single use). */
     @Nullable
     static Bitmap takeHandoffStill() {
@@ -342,6 +352,25 @@ public final class MiniPlayerBridge {
      */
     public static void expand(Context context) {
         ViewManager.instance(context).startView(PlaybackView.class);
+    }
+
+    /** Expand after the host has settled its card over the full-size video rectangle. */
+    public static void expandAtTop(Context context) {
+        Activity activity = context instanceof Activity ? (Activity) context : null;
+        sExpandAtTopPending = true;
+        if (activity != null && Build.VERSION.SDK_INT >= 34) {
+            activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0);
+            activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_TO_FRONT, 0, 0);
+        }
+        try {
+            ViewManager.instance(context).startView(PlaybackView.class);
+        } catch (RuntimeException e) {
+            sExpandAtTopPending = false;
+            throw e;
+        }
+        if (activity != null) {
+            activity.overridePendingTransition(0, 0);
+        }
     }
 
     /** Close from the bar's X: stop playback and finish the hidden playback activity. */

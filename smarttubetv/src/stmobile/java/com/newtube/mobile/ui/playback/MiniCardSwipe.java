@@ -16,6 +16,7 @@ import androidx.annotation.Nullable;
 import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.SpringAnimation;
 
+import com.google.android.material.card.MaterialCardView;
 import com.newtube.mobile.ui.common.Haptics;
 import com.newtube.mobile.ui.common.MagneticDrag;
 
@@ -44,6 +45,15 @@ public final class MiniCardSwipe implements View.OnTouchListener {
 
         /** Fade the mini-player controls as its video grows during an upward pull. */
         default void onExpansionProgress(float progress) {
+        }
+
+        /** Called when the host begins an expansion, before the card starts following the finger. */
+        default void onExpansionStarted(Rect startBounds, Rect targetBounds) {
+        }
+
+        /** Keep the expansion on the host until it settles at the full-size target. */
+        default boolean expandsOnHost() {
+            return false;
         }
 
         /** Committed upward swipe: expand from the card's current on-screen rectangle. */
@@ -81,6 +91,9 @@ public final class MiniCardSwipe implements View.OnTouchListener {
     @Nullable
     private ValueAnimator mExpandSnapBack;
     private float mExpandProgress;
+    private float mExpandStartRawY;
+    private float mExpandStartRadius;
+    private boolean mExpandRadiusCaptured;
     private boolean mExpanding;
 
     /** Returns the swipe, so the host can {@link #stop} it before moving the card itself. */
@@ -193,11 +206,11 @@ public final class MiniCardSwipe implements View.OnTouchListener {
                     mMagnet.start();
                 }
                 if (mVertical && dy < 0f && mExpandStartBounds == null) {
-                    beginExpansion();
+                    beginExpansion(event.getRawY());
                 }
                 mMagnet.move(mVertical ? dy : dx);
                 if (mExpanding) {
-                    updateExpansionFromFingerTravel(dy);
+                    updateExpansionFromFingerTravel(dy, event.getRawY());
                 }
                 return true;
             }
@@ -222,7 +235,7 @@ public final class MiniCardSwipe implements View.OnTouchListener {
                         ? event.getRawY() - mDownRawY : event.getRawX() - mDownRawX;
                 mMagnet.move(travel); // where the finger lifted, which a last MOVE may not have said
                 if (mExpanding) {
-                    updateExpansionFromFingerTravel(travel);
+                    updateExpansionFromFingerTravel(travel, event.getRawY());
                 }
                 mMagnet.finish();
                 release(mMagnet.isDetached(), travel, velocity);
@@ -270,7 +283,15 @@ public final class MiniCardSwipe implements View.OnTouchListener {
             Haptics.threshold(mCard, true); // flung before it let go: the click it skipped
         }
         if (mVertical && travel < 0f) {
-            mCallback.onSwipedUp(currentBoundsOnScreen(), velocity);
+            if (mCallback.expandsOnHost()) {
+                if (mExpanding) {
+                    settleExpansion(velocity);
+                } else {
+                    springBack(velocity);
+                }
+            } else {
+                mCallback.onSwipedUp(currentBoundsOnScreen(), velocity);
+            }
             return;
         }
         // Off that side of the screen: at least the card's width plus its distance to the edge.
@@ -311,7 +332,7 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         }
     }
 
-    private void beginExpansion() {
+    private void beginExpansion(float rawY) {
         Rect target = MiniPlayerBridge.getExpandedVideoBounds();
         Rect start = currentBoundsOnScreen();
         if (target == null || start.isEmpty() || mCard.getWidth() <= 0 || mCard.getHeight() <= 0) {
@@ -319,18 +340,34 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         }
         mExpandStartBounds = start;
         mExpandTargetBounds = target;
+        mExpandStartRawY = rawY;
+        if (mCard instanceof MaterialCardView) {
+            mExpandStartRadius = ((MaterialCardView) mCard).getRadius();
+            mExpandRadiusCaptured = true;
+        }
         mExpanding = true;
         cancelExpandSnapBack();
+        mCallback.onExpansionStarted(new Rect(start), new Rect(target));
     }
 
-    private void updateExpansionFromFingerTravel(float travel) {
+    private void updateExpansionFromFingerTravel(float travel, float rawY) {
         if (mExpandStartBounds == null || mExpandTargetBounds == null) {
             return;
         }
-        setExpandProgress(Math.min(1f, Math.max(0f, -travel / expansionTravelPx())));
+        float progress;
+        if (mCallback.expandsOnHost()) {
+            float distance = Math.max(1f, mExpandStartBounds.top - mExpandTargetBounds.top);
+            progress = (mExpandStartRawY - rawY) / distance;
+        } else {
+            progress = -travel / expansionTravelPx();
+        }
+        setExpandProgress(Math.min(1f, Math.max(0f, progress)));
     }
 
     private float expansionTravelPx() {
+        if (mCallback.expandsOnHost() && mExpandStartBounds != null && mExpandTargetBounds != null) {
+            return Math.max(1f, mExpandStartBounds.top - mExpandTargetBounds.top);
+        }
         View root = mCard.getRootView();
         float maxTravel = root != null ? root.getHeight() * 0.45f : 0f;
         float distanceToTarget = mExpandStartBounds.top - mExpandTargetBounds.top;
@@ -367,6 +404,13 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         mCard.setPivotY(0f);
         mCard.setScaleX(startScaleX + (targetScaleX - startScaleX) * progress);
         mCard.setScaleY(startScaleY + (targetScaleY - startScaleY) * progress);
+        if (mExpandRadiusCaptured && mCard instanceof MaterialCardView) {
+            float scale = Math.max(0.01f, Math.max(Math.abs(mCard.getScaleX()), Math.abs(mCard.getScaleY())));
+            ((MaterialCardView) mCard).setRadius(mExpandStartRadius * (1f - progress) / scale);
+        }
+        if (mCallback.expandsOnHost()) {
+            mCard.setTranslationZ(12f * mCard.getResources().getDisplayMetrics().density);
+        }
         mCard.setTranslationX(left - parentLocation[0] - mCard.getLeft());
         mCard.setTranslationY(top - parentLocation[1] - mCard.getTop());
         mCard.setAlpha(1f);
@@ -408,6 +452,43 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         animator.start();
     }
 
+    private void settleExpansion(float yVelocity) {
+        cancelExpandSnapBack();
+        float distancePx = (1f - mExpandProgress) * expansionTravelPx();
+        if (distancePx <= 1f) {
+            setExpandProgress(1f);
+            mCallback.onSwipedUp(currentBoundsOnScreen(), yVelocity);
+            return;
+        }
+        float speed = Math.max(Math.abs(yVelocity), 700f);
+        long durationMs = Math.round(1000f * distancePx / speed);
+        ValueAnimator animator = ValueAnimator.ofFloat(mExpandProgress, 1f);
+        mExpandSnapBack = animator;
+        animator.setDuration(Math.max(90L, Math.min(260L, durationMs)));
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(value -> setExpandProgress((float) value.getAnimatedValue()));
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean mCancelled;
+
+            @Override
+            public void onAnimationCancel(android.animation.Animator animation) {
+                mCancelled = true;
+            }
+
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (mExpandSnapBack == animator) {
+                    mExpandSnapBack = null;
+                }
+                if (!mCancelled) {
+                    setExpandProgress(1f);
+                    mCallback.onSwipedUp(currentBoundsOnScreen(), yVelocity);
+                }
+            }
+        });
+        animator.start();
+    }
+
     private void cancelExpandSnapBack() {
         if (mExpandSnapBack != null) {
             mExpandSnapBack.cancel();
@@ -420,9 +501,17 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         mExpandStartBounds = null;
         mExpandTargetBounds = null;
         mExpandProgress = 0f;
+        mExpandStartRawY = 0f;
         mCard.setAlpha(1f);
         mCard.setScaleX(1f);
         mCard.setScaleY(1f);
+        if (mExpandRadiusCaptured && mCard instanceof MaterialCardView) {
+            ((MaterialCardView) mCard).setRadius(mExpandStartRadius);
+            mExpandRadiusCaptured = false;
+        }
+        if (mCallback.expandsOnHost()) {
+            mCard.setTranslationZ(0f);
+        }
         mCard.setTranslationX(0f);
         mCard.setTranslationY(0f);
         mCard.setPivotX(mCard.getWidth() / 2f);

@@ -185,6 +185,10 @@ public class MobileBrowseActivity extends MobileActivity
     private TextureView mMiniTexture;
     private ImageButton mMiniPlayPause;
     private ProgressBar mMiniProgress;
+    private View mMiniExpandBackdrop;
+    @Nullable private android.graphics.Rect mMiniExpansionStartBounds;
+    @Nullable private android.graphics.Rect mMiniExpansionTargetBounds;
+    private boolean mMiniExpandHandoffPending;
     /** 500ms UI ticker while the bar is visible: progress line, play/pause icon, liveness check. */
     private final Runnable mMiniPlayerTick = this::onMiniPlayerTick;
     /**
@@ -316,6 +320,7 @@ public class MobileBrowseActivity extends MobileActivity
 
         mMiniPlayerBar = findViewById(R.id.mobile_mini_player);
         mMiniPlayerFrame = findViewById(R.id.mobile_mini_player_frame);
+        mMiniExpandBackdrop = findViewById(R.id.mobile_mini_expand_backdrop);
         mMiniFreeze = findViewById(R.id.mobile_mini_freeze);
         mMiniPlayPause = findViewById(R.id.mobile_mini_play_pause);
         mMiniProgress = findViewById(R.id.mobile_mini_progress);
@@ -420,16 +425,74 @@ public class MobileBrowseActivity extends MobileActivity
 
                     @Override
                     public void onExpansionProgress(float progress) {
-                        setMiniButtonsAlpha(1f - progress);
+                        setMiniButtonsAlpha(1f - Math.min(1f, progress / 0.15f));
+                        updateMiniExpansionBackdrop(progress);
+                    }
+
+                    @Override
+                    public void onExpansionStarted(android.graphics.Rect startBounds,
+                            android.graphics.Rect targetBounds) {
+                        mMiniExpansionStartBounds = new android.graphics.Rect(startBounds);
+                        mMiniExpansionTargetBounds = new android.graphics.Rect(targetBounds);
+                    }
+
+                    @Override
+                    public boolean expandsOnHost() {
+                        return true;
                     }
 
                     @Override
                     public void onSwipedUp(android.graphics.Rect currentBounds, float yVelocity) {
                         if (!mMiniClosing && MiniPlayerBridge.isActive()) {
-                            expandMiniPlayer(currentBounds, yVelocity);
+                            MiniPlayerBridge.setMiniBounds(currentBounds, yVelocity);
+                            mMiniExpandHandoffPending = true;
+                            MiniPlayerBridge.expandAtTop(MobileBrowseActivity.this);
                         }
                     }
                 }, mMiniPlayerFrame, mMiniPlayerBar);
+    }
+
+    private void updateMiniExpansionBackdrop(float progress) {
+        if (mMiniExpandBackdrop == null || mMiniExpansionStartBounds == null
+                || mMiniExpansionTargetBounds == null) {
+            return;
+        }
+        if (progress <= 0f) {
+            hideMiniExpansionBackdrop();
+            return;
+        }
+        View root = findViewById(R.id.mobile_browse_root);
+        if (root == null || root.getHeight() <= 0) {
+            return;
+        }
+        int[] rootLocation = new int[2];
+        root.getLocationOnScreen(rootLocation);
+        float screenTop = mMiniExpansionStartBounds.bottom
+                + (mMiniExpansionTargetBounds.bottom - mMiniExpansionStartBounds.bottom) * progress;
+        float top = screenTop - rootLocation[1];
+        mMiniExpandBackdrop.setPivotY(0f);
+        mMiniExpandBackdrop.setTranslationY(top);
+        mMiniExpandBackdrop.setScaleY(Math.max(0f,
+                Math.min(1f, (root.getHeight() - top) / root.getHeight())));
+        mMiniExpandBackdrop.setElevation(
+                12f * getResources().getDisplayMetrics().density);
+        mMiniExpandBackdrop.setAlpha(1f);
+    }
+
+    private void resetMiniExpansionBackdrop() {
+        hideMiniExpansionBackdrop();
+        mMiniExpansionStartBounds = null;
+        mMiniExpansionTargetBounds = null;
+    }
+
+    private void hideMiniExpansionBackdrop() {
+        if (mMiniExpandBackdrop != null) {
+            mMiniExpandBackdrop.setAlpha(0f);
+            mMiniExpandBackdrop.setScaleY(1f);
+            mMiniExpandBackdrop.setTranslationY(0f);
+            mMiniExpandBackdrop.setElevation(
+                    getResources().getDisplayMetrics().density);
+        }
     }
 
     private void expandMiniPlayer() {
@@ -1998,6 +2061,13 @@ public class MobileBrowseActivity extends MobileActivity
     @Override
     protected void onStop() {
         super.onStop();
+        if (mMiniExpandHandoffPending
+                && com.newtube.mobile.ui.playback.MobilePlaybackActivity.isCoveringScreens()) {
+            mMiniExpandHandoffPending = false;
+            resetMiniExpansionBackdrop();
+            MiniPlayerBridge.clearPendingCardFold(mMiniCardFold);
+            foldMiniCard();
+        }
         // Covered: a card still waiting for the player to fold it can go now.
         if (mMiniTexture == null) {
             hideMiniPlayer();
