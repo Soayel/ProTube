@@ -5751,6 +5751,31 @@ public class MobilePlaybackActivity extends MobileActivity
         mMorphTy = targetY - video.top;
     }
 
+    @Nullable
+    Rect getVideoAreaBoundsOnScreen() {
+        if (mContainer == null || mVideoArea == null
+                || mVideoArea.getWidth() <= 0 || mVideoArea.getHeight() <= 0) {
+            return null;
+        }
+        int left = 0;
+        int top = 0;
+        View child = mVideoArea;
+        while (child != mContainer) {
+            if (!(child.getParent() instanceof View)) {
+                return null;
+            }
+            View parent = (View) child.getParent();
+            left += child.getLeft() - parent.getScrollX();
+            top += child.getTop() - parent.getScrollY();
+            child = parent;
+        }
+        int[] containerLocation = new int[2];
+        mContainer.getLocationOnScreen(containerLocation);
+        left += containerLocation[0];
+        top += containerLocation[1];
+        return new Rect(left, top, left + mVideoArea.getWidth(), top + mVideoArea.getHeight());
+    }
+
     /** Map the watch-page video box onto an arbitrary tapped thumbnail in screen coordinates. */
     private void computeMorphTarget(Rect sourceBounds) {
         Rect video = new Rect(0, 0, mVideoArea.getWidth(), mVideoArea.getHeight());

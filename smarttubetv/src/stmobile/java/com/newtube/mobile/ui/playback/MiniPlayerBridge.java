@@ -245,6 +245,12 @@ public final class MiniPlayerBridge {
         return bounds;
     }
 
+    @Nullable
+    static Rect getExpandedVideoBounds() {
+        MobilePlaybackActivity activity = sActivity.get();
+        return activity != null ? activity.getVideoAreaBoundsOnScreen() : null;
+    }
+
     /** Consume the captured card frame (single use). */
     @Nullable
     static Bitmap takeHandoffStill() {

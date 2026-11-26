@@ -1,11 +1,16 @@
 package com.newtube.mobile.ui.playback;
 
 import android.annotation.SuppressLint;
+import android.animation.ValueAnimator;
+import android.graphics.Matrix;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewParent;
+import android.view.animation.DecelerateInterpolator;
 
 import androidx.annotation.Nullable;
 import androidx.dynamicanimation.animation.DynamicAnimation;
@@ -16,9 +21,10 @@ import com.newtube.mobile.ui.common.MagneticDrag;
 
 /**
  * NEWTUBE(motion): swipe the docked mini card left, right, or down to close it; swipe up to expand.
- * The card fades with the distance; committed dismissals fly off the chosen edge, keeping the
- * finger's speed, while incomplete swipes spring back. Taps are untouched: the swipe only claims a
- * touch once it is clearly directional, and then cancels the card's pending click.
+ * Dismissal swipes fade with distance and fly off the chosen edge, keeping the finger's speed;
+ * an upward pull grows the card back toward the full video bounds. Incomplete swipes spring back.
+ * Taps are untouched: the swipe only claims a touch once it is clearly directional, and then
+ * cancels the card's pending click.
  *
  * <p>NEWTUBE(haptics): it swipes like a notification on the Pixel (MagneticDrag): stuck at half
  * the finger's distance with a faint grain, then a click at 72 dp - 40% of the card, the old
@@ -36,8 +42,12 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         /** Committed left, right, or down swipe: fly off along the chosen axis, then close. */
         void onSwipedAway(float targetTranslation, boolean vertical, long durationMs);
 
-        /** Committed upward swipe: expand the mini-player back to the full player. */
-        void onSwipedUp();
+        /** Fade the mini-player controls as its video grows during an upward pull. */
+        default void onExpansionProgress(float progress) {
+        }
+
+        /** Committed upward swipe: expand from the card's current on-screen rectangle. */
+        void onSwipedUp(Rect currentBounds);
     }
 
     private static final float FLING_VELOCITY_DP = 450f;
@@ -46,6 +56,7 @@ public final class MiniCardSwipe implements View.OnTouchListener {
     private static final float SNAP_BACK_DAMPING = 0.6f;
     private static final long FLY_MIN_MS = 110;
     private static final long FLY_MAX_MS = 240;
+    private static final long EXPAND_SNAP_BACK_MS = 180;
 
     private final View mCard;
     private final Callback mCallback;
@@ -63,6 +74,14 @@ public final class MiniCardSwipe implements View.OnTouchListener {
     @Nullable
     private VelocityTracker mVelocity;
     private boolean mSnapBackVertical;
+    @Nullable
+    private Rect mExpandStartBounds;
+    @Nullable
+    private Rect mExpandTargetBounds;
+    @Nullable
+    private ValueAnimator mExpandSnapBack;
+    private float mExpandProgress;
+    private boolean mExpanding;
 
     /** Returns the swipe, so the host can {@link #stop} it before moving the card itself. */
     public static MiniCardSwipe attach(View card, Callback callback, View... touchTargets) {
@@ -89,6 +108,8 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         }
         mMagnet.finish();
         cancelSnapBack();
+        cancelExpandSnapBack();
+        finishExpansionTransform();
     }
 
     private MiniCardSwipe(View card, Callback callback) {
@@ -97,12 +118,21 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         mTouchSlop = ViewConfiguration.get(card.getContext()).getScaledTouchSlop();
         mFlingVelocity = FLING_VELOCITY_DP * card.getResources().getDisplayMetrics().density;
         mMagnet = new MagneticDrag(card, position -> {
-            if (mVertical) {
+            if (mExpanding && mExpandStartBounds != null && mExpandTargetBounds != null) {
+                View root = mCard.getRootView();
+                float maxTravel = root != null ? root.getHeight() * 0.45f : 0f;
+                float distanceToTarget = mExpandStartBounds.top - mExpandTargetBounds.top;
+                float travel = maxTravel > 0f
+                        ? Math.max(1f, Math.min(distanceToTarget, maxTravel))
+                        : Math.max(1f, distanceToTarget);
+                setExpandProgress(Math.min(1f, Math.max(0f, -position / travel)));
+            } else if (mVertical) {
                 mCard.setTranslationY(position);
+                mCard.setAlpha(alphaFor(position));
             } else {
                 mCard.setTranslationX(position);
+                mCard.setAlpha(alphaFor(position));
             }
-            mCard.setAlpha(alphaFor(position));
         });
     }
 
@@ -152,7 +182,12 @@ public final class MiniCardSwipe implements View.OnTouchListener {
                     }
                     mCard.animate().cancel();
                     cancelSnapBack();
+                    cancelExpandSnapBack();
+                    finishExpansionTransform();
                     mMagnet.start();
+                }
+                if (mVertical && dy < 0f && mExpandStartBounds == null) {
+                    beginExpansion();
                 }
                 mMagnet.move(mVertical ? dy : dx);
                 return true;
@@ -223,7 +258,7 @@ public final class MiniCardSwipe implements View.OnTouchListener {
             Haptics.threshold(mCard, true); // flung before it let go: the click it skipped
         }
         if (mVertical && travel < 0f) {
-            mCallback.onSwipedUp();
+            mCallback.onSwipedUp(currentBoundsOnScreen());
             return;
         }
         // Off that side of the screen: at least the card's width plus its distance to the edge.
@@ -241,6 +276,10 @@ public final class MiniCardSwipe implements View.OnTouchListener {
 
     private void springBack(float startVelocity) {
         mCard.animate().cancel();
+        if (mExpanding) {
+            springBackExpansion();
+            return;
+        }
         if (mSnapBack == null || mSnapBackVertical != mVertical) {
             cancelSnapBack();
             mSnapBack = new SpringAnimation(mCard,
@@ -258,6 +297,115 @@ public final class MiniCardSwipe implements View.OnTouchListener {
         if (mSnapBack != null) {
             mSnapBack.cancel();
         }
+    }
+
+    private void beginExpansion() {
+        Rect target = MiniPlayerBridge.getExpandedVideoBounds();
+        Rect start = currentBoundsOnScreen();
+        if (target == null || start.isEmpty() || mCard.getWidth() <= 0 || mCard.getHeight() <= 0) {
+            return;
+        }
+        mExpandStartBounds = start;
+        mExpandTargetBounds = target;
+        mExpanding = true;
+        cancelExpandSnapBack();
+    }
+
+    private void setExpandProgress(float progress) {
+        if (mExpandStartBounds == null || mExpandTargetBounds == null) {
+            return;
+        }
+        mExpandProgress = progress;
+        float width = mCard.getWidth();
+        float height = mCard.getHeight();
+        if (width <= 0f || height <= 0f) {
+            return;
+        }
+        View parent = mCard.getParent() instanceof View ? (View) mCard.getParent() : null;
+        if (parent == null) {
+            return;
+        }
+        int[] parentLocation = new int[2];
+        parent.getLocationOnScreen(parentLocation);
+        float left = mExpandStartBounds.left
+                + (mExpandTargetBounds.left - mExpandStartBounds.left) * progress;
+        float top = mExpandStartBounds.top
+                + (mExpandTargetBounds.top - mExpandStartBounds.top) * progress;
+        float targetScaleX = mExpandTargetBounds.width() / width;
+        float targetScaleY = mExpandTargetBounds.height() / height;
+        float startScaleX = mExpandStartBounds.width() / width;
+        float startScaleY = mExpandStartBounds.height() / height;
+        mCard.setPivotX(0f);
+        mCard.setPivotY(0f);
+        mCard.setScaleX(startScaleX + (targetScaleX - startScaleX) * progress);
+        mCard.setScaleY(startScaleY + (targetScaleY - startScaleY) * progress);
+        mCard.setTranslationX(left - parentLocation[0] - mCard.getLeft());
+        mCard.setTranslationY(top - parentLocation[1] - mCard.getTop());
+        mCard.setAlpha(1f);
+        mCallback.onExpansionProgress(progress);
+    }
+
+    private void springBackExpansion() {
+        cancelExpandSnapBack();
+        if (mExpandProgress <= 0f) {
+            finishExpansionTransform();
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(mExpandProgress, 0f);
+        mExpandSnapBack = animator;
+        animator.setDuration(EXPAND_SNAP_BACK_MS);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(value -> setExpandProgress((float) value.getAnimatedValue()));
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (mExpandSnapBack == animator) {
+                    mExpandSnapBack = null;
+                    finishExpansionTransform();
+                }
+            }
+        });
+        animator.start();
+    }
+
+    private void cancelExpandSnapBack() {
+        if (mExpandSnapBack != null) {
+            mExpandSnapBack.cancel();
+            mExpandSnapBack = null;
+        }
+    }
+
+    private void finishExpansionTransform() {
+        mExpanding = false;
+        mExpandStartBounds = null;
+        mExpandTargetBounds = null;
+        mExpandProgress = 0f;
+        mCard.setAlpha(1f);
+        mCard.setScaleX(1f);
+        mCard.setScaleY(1f);
+        mCard.setTranslationX(0f);
+        mCard.setTranslationY(0f);
+        mCard.setPivotX(mCard.getWidth() / 2f);
+        mCard.setPivotY(mCard.getHeight() / 2f);
+        mCallback.onExpansionProgress(0f);
+    }
+
+    private Rect currentBoundsOnScreen() {
+        RectF bounds = new RectF(0f, 0f, mCard.getWidth(), mCard.getHeight());
+        Matrix matrix = mCard.getMatrix();
+        matrix.mapRect(bounds);
+        if (mCard.getParent() instanceof View) {
+            View parent = (View) mCard.getParent();
+            int[] parentLocation = new int[2];
+            parent.getLocationOnScreen(parentLocation);
+            bounds.offset(parentLocation[0] + mCard.getLeft(), parentLocation[1] + mCard.getTop());
+        }
+        return new Rect(Math.round(bounds.left), Math.round(bounds.top),
+                Math.round(bounds.right), Math.round(bounds.bottom));
+    }
+
+    public Rect getCurrentBoundsOnScreen() {
+        return currentBoundsOnScreen();
     }
 
     private float alphaFor(float dx) {

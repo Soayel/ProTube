@@ -108,16 +108,29 @@ public final class MobileMiniPlayerController {
             }
 
             @Override
-            public void onSwipedUp() {
+            public void onExpansionProgress(float progress) {
+                setControlsAlpha(1f - progress);
+            }
+
+            @Override
+            public void onSwipedUp(Rect currentBounds) {
                 if (!mClosing && MiniPlayerBridge.isActive()) {
-                    expand();
+                    expand(currentBounds);
                 }
             }
         }, mFrame, mBar);
     }
 
     private void expand() {
-        publishBounds();
+        expand(null);
+    }
+
+    private void expand(@Nullable Rect currentBounds) {
+        if (currentBounds != null) {
+            MiniPlayerBridge.setMiniBounds(currentBounds);
+        } else {
+            publishBounds();
+        }
         MiniPlayerBridge.expand(mActivity);
     }
 
@@ -478,9 +491,14 @@ public final class MobileMiniPlayerController {
             return;
         }
         int[] location = new int[2];
-        mBar.getLocationOnScreen(location);
-        MiniPlayerBridge.setMiniBounds(new Rect(location[0], location[1],
-                location[0] + mBar.getWidth(), location[1] + mBar.getHeight()));
+        Rect bounds = mSwipe != null ? mSwipe.getCurrentBoundsOnScreen() : null;
+        if (bounds != null && !bounds.isEmpty()) {
+            MiniPlayerBridge.setMiniBounds(bounds);
+        } else {
+            mBar.getLocationOnScreen(location);
+            MiniPlayerBridge.setMiniBounds(new Rect(location[0], location[1],
+                    location[0] + mBar.getWidth(), location[1] + mBar.getHeight()));
+        }
     }
 
     private void onTick() {

@@ -419,16 +419,27 @@ public class MobileBrowseActivity extends MobileActivity
                     }
 
                     @Override
-                    public void onSwipedUp() {
+                    public void onExpansionProgress(float progress) {
+                        setMiniButtonsAlpha(1f - progress);
+                    }
+
+                    @Override
+                    public void onSwipedUp(android.graphics.Rect currentBounds) {
                         if (!mMiniClosing && MiniPlayerBridge.isActive()) {
-                            expandMiniPlayer();
+                            expandMiniPlayer(currentBounds);
                         }
                     }
                 }, mMiniPlayerFrame, mMiniPlayerBar);
     }
 
     private void expandMiniPlayer() {
-        if (mMiniPlayerBar.getWidth() > 0 && mMiniPlayerBar.getHeight() > 0) {
+        expandMiniPlayer(null);
+    }
+
+    private void expandMiniPlayer(@androidx.annotation.Nullable android.graphics.Rect currentBounds) {
+        if (currentBounds != null) {
+            MiniPlayerBridge.setMiniBounds(currentBounds);
+        } else if (mMiniPlayerBar.getWidth() > 0 && mMiniPlayerBar.getHeight() > 0) {
             int[] location = new int[2];
             mMiniPlayerBar.getLocationOnScreen(location);
             MiniPlayerBridge.setMiniBounds(new android.graphics.Rect(location[0], location[1],
