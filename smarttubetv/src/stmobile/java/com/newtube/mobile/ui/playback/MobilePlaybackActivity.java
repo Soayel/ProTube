@@ -5942,24 +5942,29 @@ public class MobilePlaybackActivity extends MobileActivity
         applyMorphCorners(settled, Math.min(sx, sy), density);
 
         // Keep details at expanded size; GPU transforms avoid RecyclerView measurement per frame.
-        float contentAlpha = morphContentAlpha(f);
+        float contentAlpha = mDismissDragActive
+                ? minimizeDragDetailsAlpha(f) : morphContentAlpha(f);
         if (mWatchContent != null) {
             mWatchContent.setAlpha(contentAlpha);
             float contentProgress = Math.max(0f, Math.min(1f, f));
             mWatchContent.setTranslationY(mWatchScroll != null
                     ? mWatchScroll.getHeight() * contentProgress : 0f);
         }
-        float backdrop = morphBackdropAlpha(settled, mMorphOverOwnBackdrop); // NEWTUBE(no-host-minimize)
+        float backdrop = mDismissDragActive
+                ? minimizeDragBackdropAlpha(settled, mMorphOverOwnBackdrop)
+                : morphBackdropAlpha(settled, mMorphOverOwnBackdrop);
         if (mWatchScroll != null && mWatchScroll.getBackground() != null) {
             int backdropAlpha = Math.round(255f * backdrop);
             mWatchScroll.getBackground().mutate().setAlpha(backdropAlpha);
         }
         setWindowBackdropAlpha(backdrop);
+        float controlsAlpha = mDismissDragActive
+                ? minimizeDragControlsAlpha(f) : contentAlpha;
         if (mControlsRoot != null && mControlsRoot.getVisibility() == View.VISIBLE) {
-            mControlsRoot.setAlpha(contentAlpha);
+            mControlsRoot.setAlpha(controlsAlpha);
         }
         if (mTimeBar != null) {
-            mTimeBar.setAlpha(contentAlpha); // outside the controls since NEWTUBE(seek bar): fade it too
+            mTimeBar.setAlpha(controlsAlpha); // outside the controls since NEWTUBE(seek bar): fade it too
         }
         if (mCommentsPanel != null) {
             mCommentsPanel.setMorphAlpha(contentAlpha);
@@ -5973,6 +5978,24 @@ public class MobilePlaybackActivity extends MobileActivity
      */
     static float morphBackdropAlpha(float f, boolean overOwnBackdrop) {
         return overOwnBackdrop ? 1f : 1f - f;
+    }
+
+    static float minimizeDragBackdropAlpha(float f, boolean overOwnBackdrop) {
+        if (overOwnBackdrop) {
+            return 1f;
+        }
+        float progress = Math.max(0f, Math.min(1f, f));
+        return (float) Math.pow(Math.max(0f, 1f - progress * 1.45f), 3.5);
+    }
+
+    static float minimizeDragDetailsAlpha(float f) {
+        float progress = Math.max(0f, Math.min(1f, f));
+        return Math.max(0f, 1f - progress / 0.20f);
+    }
+
+    static float minimizeDragControlsAlpha(float f) {
+        float progress = Math.max(0f, Math.min(1f, f));
+        return Math.max(0f, 1f - progress / 0.15f);
     }
 
     /** Fade stationary watch content in smoothly as the video expands. */
