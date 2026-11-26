@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src=".github/assets/IMG-20261126-WA0000(1).jpg" width="180" alt="ProTube logo">
+<img src=".github/assets/protube icon.png">
 
 # ProTube
 
