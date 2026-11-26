@@ -360,7 +360,6 @@ public final class MiniPlayerBridge {
         sExpandAtTopPending = true;
         if (activity != null && Build.VERSION.SDK_INT >= 34) {
             activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0);
-            activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_TO_FRONT, 0, 0);
         }
         try {
             ViewManager.instance(context).startView(PlaybackView.class);
